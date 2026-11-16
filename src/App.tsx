@@ -7,15 +7,28 @@ import Viewport, { type ViewportStatus } from './components/Viewport/Viewport'
 import { initCad } from './cad/initCad'
 import { meshCadModel } from './cad/meshCadModel'
 import {
-    buildTestModel,
-    getTestModelSource,
-    testExtrudeCommand,
-    testSketchCommand,
-} from './examples/testModel'
+    analyzeTextCad,
+    evaluateTextCad,
+    parseTextCad,
+    type Diagnostic,
+} from './dsl'
+import starSource from '../docs/dsl/examples/star.textcad?raw'
 import './App.css'
 
 type MeshData = ReturnType<typeof meshCadModel>
 type AppTheme = 'dark' | 'light'
+
+type ModelInfo = {
+    sketchName: string
+    extrusionDistance: number
+}
+
+const DSL_REVISION = 1
+
+function diagnosticMessage(diagnostic: Diagnostic) {
+    const { line, column } = diagnostic.sourceSpan.start
+    return `${diagnostic.code} · ${line}:${column} · ${diagnostic.message}`
+}
 
 function App() {
     const [mesh, setMesh] = useState<MeshData | null>(null)
@@ -29,6 +42,10 @@ function App() {
     const [isRightPanelOpen, setIsRightPanelOpen] = useState(true)
     const [leftPanelWidth, setLeftPanelWidth] = useState(246)
     const [rightPanelWidth, setRightPanelWidth] = useState(326)
+    const [modelInfo, setModelInfo] = useState<ModelInfo>({
+        sketchName: '—',
+        extrusionDistance: 0,
+    })
     const [status, setStatus] = useState<ViewportStatus>({
         level: 'INFO',
         text: 'Инициализация CAD-ядра...',
@@ -49,12 +66,37 @@ function App() {
 
                 setStatus({ level: 'INFO', text: 'Построение модели...' })
 
-                const model = buildTestModel()
-                const meshData = meshCadModel(model)
+                const parsed = parseTextCad(starSource, { revisionId: DSL_REVISION })
+                if (parsed.diagnostics.length > 0) {
+                    throw new Error(diagnosticMessage(parsed.diagnostics[0]))
+                }
+
+                const analyzed = analyzeTextCad(parsed.document, { revisionId: DSL_REVISION })
+                if (analyzed.diagnostics.length > 0) {
+                    throw new Error(diagnosticMessage(analyzed.diagnostics[0]))
+                }
+
+                const evaluated = evaluateTextCad(analyzed.program, { revisionId: DSL_REVISION })
+                if (evaluated.diagnostics.length > 0) {
+                    throw new Error(diagnosticMessage(evaluated.diagnostics[0]))
+                }
+
+                const root = evaluated.roots[0]
+                if (!root) {
+                    throw new Error('DSL не опубликовал корневую модель')
+                }
+
+                const sketch = evaluated.artifacts.find(({ kind }) => kind === 'sketch')
+                const extrusion = evaluated.artifacts.find(({ kind }) => kind === 'solid')
+                const meshData = meshCadModel(root.shape)
                 if (cancelled) return
 
                 setMesh(meshData)
-                setStatus({ level: 'INFO', text: 'Модель построена' })
+                setModelInfo({
+                    sketchName: sketch?.name ?? 'Эскиз',
+                    extrusionDistance: extrusion?.kind === 'solid' ? extrusion.distance : 0,
+                })
+                setStatus({ level: 'INFO', text: 'Модель построена из TextCAD DSL' })
             } catch (error) {
                 if (cancelled) return
 
@@ -92,8 +134,8 @@ function App() {
                 {isLeftPanelOpen && (
                     <LeftTree
                         documentName="Без названия"
-                        sketchName={testSketchCommand.name}
-                        extrusionDistance={testExtrudeCommand.distance}
+                        sketchName={modelInfo.sketchName}
+                        extrusionDistance={modelInfo.extrusionDistance}
                         width={leftPanelWidth}
                         onClose={() => setIsLeftPanelOpen(false)}
                     />
@@ -123,7 +165,7 @@ function App() {
 
                 {isRightPanelOpen && (
                     <RightPanel
-                        source={getTestModelSource()}
+                        source={starSource}
                         width={rightPanelWidth}
                         onClose={() => setIsRightPanelOpen(false)}
                     />

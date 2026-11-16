@@ -89,5 +89,9 @@ test('recovers after an unexpected top-level token', () => {
 
     assert.equal(result.diagnostics[0]?.code, 'TCD-P002')
     assert.equal(result.document.forms.length, 1)
-    assert.equal(result.document.forms[0].items[0]?.value, 'root')
+    const command = result.document.forms[0].items[0]
+    if (command?.kind !== 'identifier') {
+        assert.fail('Expected the recovered form to start with an identifier.')
+    }
+    assert.equal(command.value, 'root')
 })

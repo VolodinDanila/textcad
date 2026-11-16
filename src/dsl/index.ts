@@ -1,5 +1,15 @@
 export { parseTextCad, type ParseOptions, type ParseResult } from './parser.ts'
 export {
+    evaluateTextCad,
+    type EvaluatedArtifact,
+    type EvaluatedParameter,
+    type EvaluatedRoot,
+    type EvaluatedSketchArtifact,
+    type EvaluatedSolidArtifact,
+    type EvaluationOptions,
+    type EvaluationResult,
+} from './evaluator.ts'
+export {
     analyzeTextCad,
     type ArcExpression,
     type CircleExpression,
@@ -42,6 +52,7 @@ export type {
 export type {
     Diagnostic,
     DiagnosticSeverity,
+    GeometryDiagnosticCode,
     ParseDiagnosticCode,
     SemanticDiagnosticCode,
     SourcePosition,

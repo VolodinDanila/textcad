@@ -3,7 +3,7 @@
 
 [textcad version=1 default-length=mm default-angle=deg]
 
-[param starHeight 20mm]
+[param starHeight 40mm]
 
 [let starProfile
   [sketch plane=XY
