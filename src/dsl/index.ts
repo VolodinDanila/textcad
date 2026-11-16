@@ -1,4 +1,27 @@
 export { parseTextCad, type ParseOptions, type ParseResult } from './parser.ts'
+export {
+    analyzeTextCad,
+    type ArcExpression,
+    type CircleExpression,
+    type CurveExpression,
+    type ExtrudeExpression,
+    type FeatureExpression,
+    type LengthExpression,
+    type LineExpression,
+    type ParameterReference,
+    type Point2Expression,
+    type ProfileExpression,
+    type ScalarLiteral,
+    type SemanticBinding,
+    type SemanticHeader,
+    type SemanticOptions,
+    type SemanticParameter,
+    type SemanticProgram,
+    type SemanticResult,
+    type SemanticRoot,
+    type SemanticType,
+    type SketchExpression,
+} from './semantic.ts'
 export type {
     AstNodeBase,
     BooleanLiteralNode,
@@ -20,6 +43,7 @@ export type {
     Diagnostic,
     DiagnosticSeverity,
     ParseDiagnosticCode,
+    SemanticDiagnosticCode,
     SourcePosition,
     SourceSpan,
 } from './diagnostics.ts'

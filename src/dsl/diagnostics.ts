@@ -6,6 +6,16 @@ export type ParseDiagnosticCode =
     | 'TCD-P003'
     | 'TCD-P004'
 
+export type SemanticDiagnosticCode =
+    | 'TCD-S001'
+    | 'TCD-S002'
+    | 'TCD-S003'
+    | 'TCD-S004'
+    | 'TCD-S005'
+    | 'TCD-S006'
+    | 'TCD-S007'
+    | 'TCD-S008'
+
 export type SourcePosition = {
     offset: number
     line: number
@@ -18,7 +28,7 @@ export type SourceSpan = {
 }
 
 export type Diagnostic = {
-    code: ParseDiagnosticCode | (string & {})
+    code: ParseDiagnosticCode | SemanticDiagnosticCode | (string & {})
     severity: DiagnosticSeverity
     message: string
     sourceSpan: SourceSpan
@@ -39,5 +49,22 @@ export function createParseDiagnostic(
         sourceSpan,
         revisionId,
         relatedSpans: [],
+    }
+}
+
+export function createSemanticDiagnostic(
+    code: SemanticDiagnosticCode,
+    message: string,
+    sourceSpan: SourceSpan,
+    revisionId: number,
+    relatedSpans: SourceSpan[] = [],
+): Diagnostic {
+    return {
+        code,
+        severity: 'error',
+        message,
+        sourceSpan,
+        revisionId,
+        relatedSpans,
     }
 }
