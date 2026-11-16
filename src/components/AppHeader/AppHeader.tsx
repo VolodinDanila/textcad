@@ -3,53 +3,98 @@ import './AppHeader.css'
 
 type MenuDefinition = {
     label: string
-    items: string[]
+    items: Array<{
+        id: string
+        label: string
+        shortcut?: string
+        action?: 'new' | 'open' | 'save' | 'saveAs'
+    }>
 }
 
 const menus: MenuDefinition[] = [
     {
         label: 'File',
-        items: ['New', 'Open…', 'Import…', 'Save', 'Export…'],
+        items: [
+            { id: 'new', label: 'New', shortcut: 'Ctrl+N', action: 'new' },
+            { id: 'open', label: 'Open…', shortcut: 'Ctrl+O', action: 'open' },
+            { id: 'save', label: 'Save', shortcut: 'Ctrl+S', action: 'save' },
+            { id: 'save-as', label: 'Save As…', shortcut: 'Ctrl+Shift+S', action: 'saveAs' },
+            { id: 'import', label: 'Import…' },
+            { id: 'export', label: 'Export…' },
+        ],
     },
     {
         label: 'Edit',
-        items: ['Undo', 'Redo', 'Preferences…'],
+        items: [
+            { id: 'undo', label: 'Undo' },
+            { id: 'redo', label: 'Redo' },
+            { id: 'preferences', label: 'Preferences…' },
+        ],
     },
     {
         label: 'View',
-        items: ['Fit view', 'Grid', 'Axes', 'Projection'],
+        items: [
+            { id: 'fit-view', label: 'Fit view' },
+            { id: 'grid', label: 'Grid' },
+            { id: 'axes', label: 'Axes' },
+            { id: 'projection', label: 'Projection' },
+        ],
     },
     {
         label: 'Tools',
-        items: ['Measure', 'Section', 'Model inspector'],
+        items: [
+            { id: 'measure', label: 'Measure' },
+            { id: 'section', label: 'Section' },
+            { id: 'model-inspector', label: 'Model inspector' },
+        ],
     },
     {
         label: 'Help',
-        items: ['Quick start', 'Keyboard shortcuts', 'About ТекстВСАПР'],
+        items: [
+            { id: 'quick-start', label: 'Quick start' },
+            { id: 'shortcuts', label: 'Keyboard shortcuts' },
+            { id: 'about', label: 'About ТекстВСАПР' },
+        ],
     },
 ]
 
 type AppHeaderProps = {
     documentName: string
+    isDocumentDirty: boolean
     theme: 'dark' | 'light'
     isLeftPanelOpen: boolean
     isRightPanelOpen: boolean
     onToggleTheme: () => void
     onToggleLeftPanel: () => void
     onToggleRightPanel: () => void
+    onNewDocument: () => void
+    onOpenDocument: () => void | Promise<void>
+    onSaveDocument: () => void | Promise<void>
+    onSaveDocumentAs: () => void | Promise<void>
 }
 
 function AppHeader({
     documentName,
+    isDocumentDirty,
     theme,
     isLeftPanelOpen,
     isRightPanelOpen,
     onToggleTheme,
     onToggleLeftPanel,
     onToggleRightPanel,
+    onNewDocument,
+    onOpenDocument,
+    onSaveDocument,
+    onSaveDocumentAs,
 }: AppHeaderProps) {
     const [openMenu, setOpenMenu] = useState<string | null>(null)
     const headerRef = useRef<HTMLElement>(null)
+    const documentActions = {
+        new: onNewDocument,
+        open: onOpenDocument,
+        save: onSaveDocument,
+        saveAs: onSaveDocumentAs,
+    }
 
     useEffect(() => {
         const handlePointerDown = (event: PointerEvent) => {
@@ -61,7 +106,26 @@ function AppHeader({
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 setOpenMenu(null)
+                return
             }
+
+            if (!event.ctrlKey && !event.metaKey) return
+
+            const key = event.key.toLowerCase()
+            const action = key === 'n'
+                ? onNewDocument
+                : key === 'o'
+                    ? onOpenDocument
+                    : key === 's' && event.shiftKey
+                        ? onSaveDocumentAs
+                        : key === 's'
+                            ? onSaveDocument
+                            : null
+            if (!action) return
+
+            event.preventDefault()
+            setOpenMenu(null)
+            void action()
         }
 
         window.addEventListener('pointerdown', handlePointerDown)
@@ -71,7 +135,7 @@ function AppHeader({
             window.removeEventListener('pointerdown', handlePointerDown)
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [])
+    }, [onNewDocument, onOpenDocument, onSaveDocument, onSaveDocumentAs])
 
     return (
         <header ref={headerRef} className="app-header">
@@ -102,24 +166,35 @@ function AppHeader({
                                         role="menu"
                                         aria-label={menu.label}
                                     >
-                                        {menu.items.map((item) => (
-                                            <button
-                                                className="app-header__dropdown-item"
-                                                type="button"
-                                                role="menuitem"
-                                                disabled
-                                                title="Пока недоступно"
-                                                key={item}
-                                            >
-                                                <span>{item}</span>
-                                                <span
-                                                    className="app-header__placeholder"
-                                                    aria-hidden="true"
+                                        {menu.items.map((item) => {
+                                            const action = item.action
+                                                ? documentActions[item.action]
+                                                : undefined
+
+                                            return (
+                                                <button
+                                                    className="app-header__dropdown-item"
+                                                    type="button"
+                                                    role="menuitem"
+                                                    disabled={!action}
+                                                    title={action ? undefined : 'Пока недоступно'}
+                                                    key={item.id}
+                                                    onClick={() => {
+                                                        if (!action) return
+                                                        setOpenMenu(null)
+                                                        void action()
+                                                    }}
                                                 >
-                                                    —
-                                                </span>
-                                            </button>
-                                        ))}
+                                                    <span>{item.label}</span>
+                                                    <span
+                                                        className="app-header__placeholder"
+                                                        aria-hidden="true"
+                                                    >
+                                                        {item.shortcut ?? '—'}
+                                                    </span>
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -128,9 +203,18 @@ function AppHeader({
                 </nav>
             </div>
 
-            <div className="app-header__document" title={documentName}>
+            <div
+                className="app-header__document"
+                title={isDocumentDirty
+                    ? `${documentName} · есть несохранённые изменения`
+                    : documentName}
+            >
                 {documentName}
-                <span className="app-header__document-dot" aria-hidden="true" />
+                <span
+                    className="app-header__document-dot"
+                    data-dirty={isDocumentDirty || undefined}
+                    aria-hidden="true"
+                />
             </div>
 
             <div className="app-header__right">

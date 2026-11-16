@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AppHeader from './components/AppHeader/AppHeader'
 import LeftTree from './components/LeftTree/LeftTree'
 import PanelResizer from './components/PanelResizer/PanelResizer'
@@ -13,6 +13,12 @@ import {
     type Diagnostic,
     type EvaluationResult,
 } from './dsl'
+import {
+    openTextCadDocument,
+    saveTextCadDocumentAs,
+    writeTextCadDocument,
+    type TextCadFileHandle,
+} from './files/textCadFile'
 import starSource from '../docs/dsl/examples/star.textcad?raw'
 import './App.css'
 
@@ -30,7 +36,60 @@ type ModelInfo = {
 
 type SourceState = 'building' | 'synced' | 'error'
 
+type DocumentSession = {
+    name: string
+    source: string
+    savedSource: string | null
+}
+
 const EVALUATION_DELAY = 350
+const DOCUMENT_DRAFT_KEY = 'textcad-document-draft'
+const NEW_DOCUMENT_SOURCE = `[textcad version=1 default-length=mm default-angle=deg]
+
+[param bodyHeight 10mm]
+
+[let baseProfile
+  [sketch plane=XY
+    [profile role=outer
+      [circle center=[0mm 0mm] radius=20mm]
+    ]
+  ]
+]
+
+[let body
+  [extrude baseProfile length=bodyHeight]
+]
+
+[root body label="Body"]
+`
+
+function loadDocumentSession(): DocumentSession {
+    try {
+        const draft = localStorage.getItem(DOCUMENT_DRAFT_KEY)
+        if (draft) {
+            const value = JSON.parse(draft) as Partial<DocumentSession>
+            if (
+                typeof value.name === 'string'
+                && typeof value.source === 'string'
+                && (typeof value.savedSource === 'string' || value.savedSource === null)
+            ) {
+                return {
+                    name: value.name,
+                    source: value.source,
+                    savedSource: value.savedSource,
+                }
+            }
+        }
+    } catch {
+        localStorage.removeItem(DOCUMENT_DRAFT_KEY)
+    }
+
+    return {
+        name: 'star.textcad',
+        source: starSource,
+        savedSource: starSource,
+    }
+}
 
 function diagnosticMessage(diagnostic: Diagnostic) {
     const { line, column } = diagnostic.sourceSpan.start
@@ -59,10 +118,15 @@ function disposeSolids(result: EvaluationResult) {
 
 function App() {
     const [mesh, setMesh] = useState<MeshData | null>(null)
-    const [source, setSource] = useState(starSource)
+    const [documentSession, setDocumentSession] = useState<DocumentSession>(loadDocumentSession)
+    const [evaluationRequest, setEvaluationRequest] = useState(0)
     const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
     const [sourceState, setSourceState] = useState<SourceState>('building')
     const revisionRef = useRef(0)
+    const fileHandleRef = useRef<TextCadFileHandle | null>(null)
+    const source = documentSession.source
+    const isDocumentDirty = documentSession.savedSource === null
+        || source !== documentSession.savedSource
     const [theme, setTheme] = useState<AppTheme>(() => {
         const savedTheme = localStorage.getItem('textcad-theme')
         return savedTheme === 'dark' || savedTheme === 'light'
@@ -86,6 +150,22 @@ function App() {
         localStorage.setItem('textcad-theme', theme)
         document.documentElement.style.colorScheme = theme
     }, [theme])
+
+    useEffect(() => {
+        localStorage.setItem(DOCUMENT_DRAFT_KEY, JSON.stringify(documentSession))
+    }, [documentSession])
+
+    useEffect(() => {
+        if (!isDocumentDirty) return
+
+        const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault()
+            event.returnValue = ''
+        }
+
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [isDocumentDirty])
 
     useEffect(() => {
         const revisionId = revisionRef.current + 1
@@ -184,10 +264,10 @@ function App() {
             cancelled = true
             window.clearTimeout(timerId)
         }
-    }, [source])
+    }, [evaluationRequest, source])
 
     const handleSourceChange = (nextSource: string) => {
-        setSource(nextSource)
+        setDocumentSession((current) => ({ ...current, source: nextSource }))
         setSourceState('building')
         setStatus({
             level: mesh ? 'WARN' : 'INFO',
@@ -197,10 +277,112 @@ function App() {
         })
     }
 
+    const confirmDiscardChanges = useCallback(() => (
+        !isDocumentDirty
+        || window.confirm('Есть несохранённые изменения. Продолжить без сохранения?')
+    ), [isDocumentDirty])
+
+    const beginDocumentEvaluation = useCallback((message: string) => {
+        setDiagnostics([])
+        setSourceState('building')
+        setStatus({ level: 'INFO', text: message })
+        setEvaluationRequest((current) => current + 1)
+    }, [])
+
+    const handleNewDocument = useCallback(() => {
+        if (!confirmDiscardChanges()) return
+
+        fileHandleRef.current = null
+        setDocumentSession({
+            name: 'Без названия',
+            source: NEW_DOCUMENT_SOURCE,
+            savedSource: null,
+        })
+        beginDocumentEvaluation('Создание нового документа...')
+    }, [beginDocumentEvaluation, confirmDiscardChanges])
+
+    const handleOpenDocument = useCallback(async () => {
+        if (!confirmDiscardChanges()) return
+
+        try {
+            const opened = await openTextCadDocument()
+            if (!opened) return
+
+            fileHandleRef.current = opened.handle
+            setDocumentSession({
+                name: opened.name,
+                source: opened.source,
+                savedSource: opened.source,
+            })
+            beginDocumentEvaluation(`Открытие ${opened.name}...`)
+        } catch (error) {
+            setStatus({
+                level: 'ERROR',
+                text: error instanceof Error
+                    ? `Не удалось открыть файл: ${error.message}`
+                    : 'Не удалось открыть файл',
+            })
+        }
+    }, [beginDocumentEvaluation, confirmDiscardChanges])
+
+    const handleSaveDocumentAs = useCallback(async () => {
+        const sourceToSave = documentSession.source
+        const suggestedName = documentSession.name === 'Без названия'
+            ? 'model.textcad'
+            : documentSession.name
+
+        try {
+            const saved = await saveTextCadDocumentAs(suggestedName, sourceToSave)
+            if (!saved) return
+
+            fileHandleRef.current = saved.handle
+            setDocumentSession((current) => ({
+                ...current,
+                name: saved.name,
+                savedSource: sourceToSave,
+            }))
+            setStatus({ level: 'INFO', text: `${saved.name} сохранён` })
+        } catch (error) {
+            setStatus({
+                level: 'ERROR',
+                text: error instanceof Error
+                    ? `Не удалось сохранить файл: ${error.message}`
+                    : 'Не удалось сохранить файл',
+            })
+        }
+    }, [documentSession.name, documentSession.source])
+
+    const handleSaveDocument = useCallback(async () => {
+        const handle = fileHandleRef.current
+        if (!handle) {
+            await handleSaveDocumentAs()
+            return
+        }
+
+        const sourceToSave = documentSession.source
+        try {
+            await writeTextCadDocument(handle, sourceToSave)
+            setDocumentSession((current) => ({
+                ...current,
+                name: handle.name,
+                savedSource: sourceToSave,
+            }))
+            setStatus({ level: 'INFO', text: `${handle.name} сохранён` })
+        } catch (error) {
+            setStatus({
+                level: 'ERROR',
+                text: error instanceof Error
+                    ? `Не удалось сохранить файл: ${error.message}`
+                    : 'Не удалось сохранить файл',
+            })
+        }
+    }, [documentSession.source, handleSaveDocumentAs])
+
     return (
         <main className="app-shell" data-theme={theme}>
             <AppHeader
-                documentName="Без названия"
+                documentName={documentSession.name}
+                isDocumentDirty={isDocumentDirty}
                 theme={theme}
                 isLeftPanelOpen={isLeftPanelOpen}
                 isRightPanelOpen={isRightPanelOpen}
@@ -209,12 +391,16 @@ function App() {
                 }}
                 onToggleLeftPanel={() => setIsLeftPanelOpen((isOpen) => !isOpen)}
                 onToggleRightPanel={() => setIsRightPanelOpen((isOpen) => !isOpen)}
+                onNewDocument={handleNewDocument}
+                onOpenDocument={handleOpenDocument}
+                onSaveDocument={handleSaveDocument}
+                onSaveDocumentAs={handleSaveDocumentAs}
             />
 
             <div className="app-workspace">
                 {isLeftPanelOpen && (
                     <LeftTree
-                        documentName="Без названия"
+                        documentName={documentSession.name}
                         sketches={modelInfo.sketches}
                         bodies={modelInfo.bodies}
                         isStale={sourceState !== 'synced'}
