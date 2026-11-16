@@ -1,30 +1,44 @@
 import { useState } from 'react'
 import './LeftTree.css'
 
+type BodyItem = {
+    name: string
+    operation: 'extrude'
+    distance: number
+}
+
 type LeftTreeProps = {
     documentName: string
-    sketchName: string
-    extrusionDistance: number
+    sketches: string[]
+    bodies: BodyItem[]
+    isStale: boolean
     width: number
     onClose: () => void
 }
 
-type ExpandableNode = 'document' | 'sketches' | 'bodies' | 'body'
+function countLabel(count: number, one: string, few: string, many: string) {
+    const modulo100 = count % 100
+    const modulo10 = count % 10
+
+    if (modulo100 >= 11 && modulo100 <= 14) return many
+    if (modulo10 === 1) return one
+    if (modulo10 >= 2 && modulo10 <= 4) return few
+    return many
+}
 
 function LeftTree({
     documentName,
-    sketchName,
-    extrusionDistance,
+    sketches,
+    bodies,
+    isStale,
     width,
     onClose,
 }: LeftTreeProps) {
-    const [expandedNodes, setExpandedNodes] = useState<Set<ExpandableNode>>(
-        () => new Set(['document', 'sketches', 'bodies', 'body']),
-    )
-    const [selectedNode, setSelectedNode] = useState('body')
+    const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set())
+    const [selectedNode, setSelectedNode] = useState('document')
 
-    const toggleNode = (node: ExpandableNode) => {
-        setExpandedNodes((current) => {
+    const toggleNode = (node: string) => {
+        setCollapsedNodes((current) => {
             const next = new Set(current)
 
             if (next.has(node)) {
@@ -48,13 +62,14 @@ function LeftTree({
         label: string
         depth: number
         icon: 'document' | 'folder' | 'sketch' | 'body' | 'feature'
-        expandable?: ExpandableNode
+        expandable?: string
     }) => {
-        const isExpanded = expandable ? expandedNodes.has(expandable) : undefined
+        const isExpanded = expandable ? !collapsedNodes.has(expandable) : undefined
         const isSelected = selectedNode === id
 
         return (
             <div
+                key={id}
                 className={`left-tree__row${isSelected ? ' left-tree__row--selected' : ''}`}
                 style={{ '--tree-depth': depth } as React.CSSProperties}
                 role="treeitem"
@@ -92,10 +107,9 @@ function LeftTree({
         )
     }
 
-    const documentExpanded = expandedNodes.has('document')
-    const sketchesExpanded = expandedNodes.has('sketches')
-    const bodiesExpanded = expandedNodes.has('bodies')
-    const bodyExpanded = expandedNodes.has('body')
+    const documentExpanded = !collapsedNodes.has('document')
+    const sketchesExpanded = !collapsedNodes.has('sketches')
+    const bodiesExpanded = !collapsedNodes.has('bodies')
 
     return (
         <aside
@@ -135,12 +149,12 @@ function LeftTree({
                             expandable: 'sketches',
                         })}
 
-                        {sketchesExpanded && renderRow({
-                            id: 'sketch',
-                            label: sketchName,
+                        {sketchesExpanded && sketches.map((name) => renderRow({
+                            id: `sketch:${name}`,
+                            label: name,
                             depth: 2,
                             icon: 'sketch',
-                        })}
+                        }))}
 
                         {renderRow({
                             id: 'bodies',
@@ -150,31 +164,36 @@ function LeftTree({
                             expandable: 'bodies',
                         })}
 
-                        {bodiesExpanded && (
-                            <>
-                                {renderRow({
-                                    id: 'body',
-                                    label: 'Body',
-                                    depth: 2,
-                                    icon: 'body',
-                                    expandable: 'body',
-                                })}
+                        {bodiesExpanded && bodies.map((body) => {
+                            const bodyNode = `body:${body.name}`
+                            return (
+                                <div key={bodyNode}>
+                                    {renderRow({
+                                        id: bodyNode,
+                                        label: body.name,
+                                        depth: 2,
+                                        icon: 'body',
+                                        expandable: bodyNode,
+                                    })}
 
-                                {bodyExpanded && renderRow({
-                                    id: 'extrude',
-                                    label: `Extrude · ${extrusionDistance} мм`,
-                                    depth: 3,
-                                    icon: 'feature',
-                                })}
-                            </>
-                        )}
+                                    {!collapsedNodes.has(bodyNode) && renderRow({
+                                        id: `feature:${body.name}`,
+                                        label: `Extrude · ${body.distance} мм`,
+                                        depth: 3,
+                                        icon: 'feature',
+                                    })}
+                                </div>
+                            )
+                        })}
                     </>
                 )}
             </div>
 
-            <div className="left-tree__footer">
+            <div className="left-tree__footer" data-stale={isStale || undefined}>
                 <span className="left-tree__footer-dot" aria-hidden="true" />
-                1 тело · 1 эскиз
+                {bodies.length} {countLabel(bodies.length, 'тело', 'тела', 'тел')}
+                {' · '}
+                {sketches.length} {countLabel(sketches.length, 'эскиз', 'эскиза', 'эскизов')}
             </div>
         </aside>
     )

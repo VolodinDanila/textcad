@@ -166,8 +166,48 @@
     background: #eee7f7;
 }
 
-.app-shell[data-theme="light"] .right-panel__source {
+.app-shell[data-theme="light"] .right-panel__source-editor {
     color: #303641;
+    caret-color: #3f1f63;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath d='M2.5 1.5h5M5 1.5v13M2.5 14.5h5' fill='none' stroke='%233f1f63' stroke-width='1.25' stroke-linecap='round'/%3E%3C/svg%3E") 5 8, text;
+}
+
+.app-shell[data-theme="light"] .right-panel__source-editor:focus {
+    background: #ffffff;
+    box-shadow: inset 0 0 0 2px rgb(118 86 157 / 48%);
+}
+
+.app-shell[data-theme="light"] .right-panel__source-editor::selection {
+    color: #30283a;
+    background: #ddcfee;
+}
+
+.app-shell[data-theme="light"] .right-panel__diagnostics {
+    background: #fff8fa;
+    border-top-color: #e5cbd2;
+}
+
+.app-shell[data-theme="light"] .right-panel__diagnostic {
+    color: #684e58;
+}
+
+.app-shell[data-theme="light"] .right-panel__diagnostic:hover,
+.app-shell[data-theme="light"] .right-panel__diagnostic:focus-visible {
+    background: #f7e9ed;
+}
+
+.app-shell[data-theme="light"] .right-panel__diagnostic-meta {
+    color: #a64f69;
+}
+
+.app-shell[data-theme="light"] .right-panel__status[data-state="building"]
+.right-panel__status-dot {
+    background: #a98bd4;
+}
+
+.app-shell[data-theme="light"] .right-panel__status[data-state="error"]
+.right-panel__status-dot {
+    background: #d3637f;
 }
 
 .app-shell[data-theme="light"] .right-panel__empty {

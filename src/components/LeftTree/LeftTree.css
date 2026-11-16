@@ -190,6 +190,10 @@
     background: #5d8de8;
 }
 
+.left-tree__footer[data-stale] .left-tree__footer-dot {
+    background: #bda1e6;
+}
+
 @media (max-width: 920px) {
     .left-tree {
         position: absolute;

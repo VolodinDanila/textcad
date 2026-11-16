@@ -79,19 +79,84 @@
 }
 
 .right-panel__content--source {
-    padding: 17px 15px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     scrollbar-color: #3a3e45 transparent;
     scrollbar-width: thin;
 }
 
-.right-panel__source {
-    min-width: max-content;
+.right-panel__source-editor {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
     margin: 0;
+    padding: 17px 15px;
+    resize: none;
+    border: 0;
+    outline: 0;
     color: #f2f4f7;
+    background: transparent;
     font: 600 12px/1.72 "Cascadia Mono", "SFMono-Regular", Consolas,
         "Liberation Mono", monospace;
     white-space: pre;
+    overflow: auto;
     tab-size: 4;
+    caret-color: #e1c8ff;
+    cursor: text;
+    scrollbar-color: #3a3e45 transparent;
+    scrollbar-width: thin;
+}
+
+.right-panel__source-editor:focus {
+    background: #101114;
+    box-shadow: inset 0 0 0 1px rgb(189 161 230 / 28%);
+}
+
+.right-panel__source-editor::selection {
+    color: #ffffff;
+    background: #665080;
+}
+
+.right-panel__diagnostics {
+    max-height: 155px;
+    flex: 0 0 auto;
+    overflow: auto;
+    padding: 6px;
+    background: #151116;
+    border-top: 1px solid #493344;
+    scrollbar-width: thin;
+}
+
+.right-panel__diagnostic {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 4px;
+    color: #d6bdc8;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.right-panel__diagnostic:hover,
+.right-panel__diagnostic:focus-visible {
+    outline: 0;
+    background: #291c24;
+}
+
+.right-panel__diagnostic-meta {
+    color: #e79aae;
+    font: 700 10px/1.3 "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.right-panel__diagnostic-message {
+    font-size: 11px;
+    line-height: 1.4;
 }
 
 .right-panel__content--chat {
@@ -143,6 +208,22 @@
     border-radius: 50%;
     background: #54c884;
     box-shadow: 0 0 6px rgb(84 200 132 / 45%);
+}
+
+.right-panel__status[data-state="building"] .right-panel__status-dot {
+    background: #bda1e6;
+    box-shadow: 0 0 6px rgb(189 161 230 / 48%);
+    animation: right-panel-pulse 1s ease-in-out infinite alternate;
+}
+
+.right-panel__status[data-state="error"] .right-panel__status-dot {
+    background: #e0728e;
+    box-shadow: 0 0 6px rgb(224 114 142 / 48%);
+}
+
+@keyframes right-panel-pulse {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
 }
 
 @media (max-width: 760px) {
