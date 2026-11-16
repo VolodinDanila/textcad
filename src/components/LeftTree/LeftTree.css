@@ -1,0 +1,201 @@
+.left-tree {
+    min-width: 210px;
+    max-width: 34vw;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    color: #d5d8de;
+    background: #111316;
+    border-right: 1px solid #383c43;
+    box-shadow: 8px 0 24px rgb(0 0 0 / 8%);
+    user-select: none;
+}
+
+.left-tree__header {
+    height: 42px;
+    flex: 0 0 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 11px 0 14px;
+    color: #929aa8;
+    background: #181a1f;
+    border-bottom: 1px solid #30343b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.left-tree__close {
+    width: 27px;
+    height: 27px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    color: #9298a3;
+    background: transparent;
+    font: 300 20px/1 inherit;
+    cursor: pointer;
+}
+
+.left-tree__close:hover {
+    color: #ffffff;
+    background: #282b31;
+}
+
+.left-tree__close:focus-visible,
+.left-tree__row:focus-visible {
+    outline: 1px solid #77a7ff;
+    outline-offset: -1px;
+}
+
+.left-tree__content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 7px 0;
+    scrollbar-color: #3a3e45 transparent;
+    scrollbar-width: thin;
+}
+
+.left-tree__row {
+    --tree-depth: 0;
+    position: relative;
+    height: 29px;
+    display: flex;
+    align-items: center;
+    min-width: max-content;
+    padding: 0 10px 0 calc(8px + var(--tree-depth) * 17px);
+    border-left: 2px solid transparent;
+    color: #b8bec8;
+    font-size: 12px;
+    cursor: default;
+}
+
+.left-tree__row:hover {
+    color: #e8ebef;
+    background: #1d2025;
+}
+
+.left-tree__row--selected {
+    color: #f1f3f6;
+    background: #242932;
+    border-left-color: #5d8de8;
+}
+
+.left-tree__chevron,
+.left-tree__chevron-spacer {
+    width: 16px;
+    height: 22px;
+    flex: 0 0 16px;
+}
+
+.left-tree__chevron {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    color: #7f8792;
+    background: transparent;
+    font: 10px/1 inherit;
+    cursor: pointer;
+}
+
+.left-tree__chevron:hover {
+    color: #ffffff;
+}
+
+.left-tree__icon {
+    position: relative;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 15px;
+    margin-right: 7px;
+}
+
+.left-tree__icon--document {
+    border: 1px solid #8593aa;
+    border-radius: 2px;
+    background: linear-gradient(135deg, transparent 0 65%, #3a4657 66%);
+}
+
+.left-tree__icon--folder {
+    width: 16px;
+    height: 11px;
+    margin-top: 2px;
+    border: 1px solid #9a8054;
+    border-radius: 2px;
+    background: #4b402d;
+}
+
+.left-tree__icon--folder::before {
+    content: '';
+    position: absolute;
+    left: 1px;
+    top: -4px;
+    width: 7px;
+    height: 4px;
+    border: 1px solid #9a8054;
+    border-bottom: 0;
+    border-radius: 2px 2px 0 0;
+    background: #4b402d;
+}
+
+.left-tree__icon--sketch {
+    border: 1px dashed #b16c8f;
+    border-radius: 2px;
+    transform: rotate(45deg) scale(0.72);
+}
+
+.left-tree__icon--body {
+    border: 1px solid #7793bd;
+    background: linear-gradient(135deg, #4e6c96 0 50%, #334761 51%);
+    transform: rotate(30deg) skew(-7deg, -7deg) scale(0.76);
+}
+
+.left-tree__icon--feature {
+    width: 13px;
+    height: 13px;
+    margin-left: 1px;
+    border: 1px solid #7896c2;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgb(120 150 194 / 12%) inset;
+}
+
+.left-tree__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.left-tree__footer {
+    height: 28px;
+    flex: 0 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 13px;
+    color: #8994a8;
+    background: #191b20;
+    border-top: 1px solid #30343b;
+    font-size: 10px;
+}
+
+.left-tree__footer-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #5d8de8;
+}
+
+@media (max-width: 920px) {
+    .left-tree {
+        position: absolute;
+        inset: 0 auto 0 0;
+        z-index: 11;
+        width: min(246px, 82vw);
+        max-width: 82vw;
+    }
+}

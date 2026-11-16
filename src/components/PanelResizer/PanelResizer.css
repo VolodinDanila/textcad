@@ -1,0 +1,78 @@
+.panel-resizer {
+    position: relative;
+    z-index: 8;
+    width: 7px;
+    flex: 0 0 7px;
+    margin: 0 -3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.panel-resizer__line {
+    position: absolute;
+    inset: 0 auto;
+    width: 1px;
+    background: #383c43;
+    transition: width 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.panel-resizer__grip {
+    position: relative;
+    z-index: 1;
+    width: 7px;
+    height: 34px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: 1px solid #424750;
+    border-radius: 4px;
+    background: #1c1f24;
+    opacity: 0;
+    transform: scale(0.92);
+    transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.panel-resizer__grip i {
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: #818a98;
+}
+
+.panel-resizer:hover .panel-resizer__line,
+.panel-resizer:focus-visible .panel-resizer__line,
+.panel-resizer--dragging .panel-resizer__line {
+    width: 2px;
+    background: #5d8de8;
+    box-shadow: 0 0 8px rgb(93 141 232 / 45%);
+}
+
+.panel-resizer:hover .panel-resizer__grip,
+.panel-resizer:focus-visible .panel-resizer__grip,
+.panel-resizer--dragging .panel-resizer__grip {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.panel-resizer:focus-visible .panel-resizer__grip {
+    outline: 1px solid #77a7ff;
+    outline-offset: 1px;
+}
+
+@media (max-width: 920px) {
+    .panel-resizer--left {
+        display: none;
+    }
+}
+
+@media (max-width: 760px) {
+    .panel-resizer--right {
+        display: none;
+    }
+}
