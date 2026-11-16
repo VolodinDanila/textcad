@@ -1,0 +1,32 @@
+; Первая модель для реализации TextCAD DSL v0.
+; Соответствует текущей демонстрационной звезде в приложении.
+
+[textcad version=1 default-length=mm default-angle=deg]
+
+[param starHeight 20mm]
+
+[let starProfile
+  [sketch plane=XY
+    [profile role=outer
+      [line start=[-50mm -29mm] end=[-17mm -29mm]]
+      [line start=[-17mm -29mm] end=[0mm -58mm]]
+      [line start=[0mm -58mm] end=[17mm -29mm]]
+      [line start=[17mm -29mm] end=[50mm -29mm]]
+      [line start=[50mm -29mm] end=[33mm 0mm]]
+      [line start=[33mm 0mm] end=[50mm 29mm]]
+      [line start=[50mm 29mm] end=[17mm 29mm]]
+      [line start=[17mm 29mm] end=[0mm 58mm]]
+      [line start=[0mm 58mm] end=[-17mm 29mm]]
+      [line start=[-17mm 29mm] end=[-50mm 29mm]]
+      [line start=[-50mm 29mm] end=[-33mm 0mm]]
+      [line start=[-33mm 0mm] end=[-50mm -29mm]]
+    ]
+  ]
+]
+
+[let starBody
+  [extrude starProfile length=starHeight]
+]
+
+[root starBody label="Star"]
+
