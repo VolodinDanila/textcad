@@ -1,6 +1,9 @@
 import {
     draw,
     drawCircle,
+    getOC,
+    measureVolume,
+    Sketches,
     type Drawing,
     type Shape3D,
 } from 'replicad'
@@ -13,6 +16,7 @@ import {
 } from './diagnostics.ts'
 import type {
     ArcExpression,
+    BooleanExpression,
     CurveExpression,
     ExtrudeExpression,
     LengthExpression,
@@ -21,6 +25,8 @@ import type {
     ProfileExpression,
     SemanticProgram,
     SketchExpression,
+    SolidExpression,
+    SolidOperand,
 } from './semantic.ts'
 
 export type EvaluationOptions = {
@@ -39,6 +45,7 @@ export type EvaluatedSketchArtifact = {
     name: string
     drawing: Drawing
     plane: 'XY' | 'XZ' | 'YZ'
+    origin: [number, number, number]
     sourceId: string
 }
 
@@ -46,8 +53,10 @@ export type EvaluatedSolidArtifact = {
     kind: 'solid'
     name: string
     shape: Shape3D
-    operation: 'extrude'
-    distance: number
+    operation: SolidExpression['kind']
+    distance?: number
+    inputs: string[]
+    solidCount: number
     sourceId: string
 }
 
@@ -58,6 +67,7 @@ export type EvaluatedRoot = {
     label: string | null
     shape: Shape3D
     sourceId: string
+    solidCount: number
 }
 
 export type EvaluationResult = {
@@ -123,27 +133,38 @@ class Evaluator {
                     continue
                 }
 
-                const artifact = this.evaluateExtrude(binding.name, binding.expression)
-                if (artifact) {
-                    this.artifacts.set(binding.name, artifact)
-                }
+                const expression = binding.expression
+                const shape = this.evaluateSolid(expression)
+                this.artifacts.set(binding.name, {
+                    kind: 'solid',
+                    name: binding.name,
+                    shape,
+                    operation: expression.kind,
+                    distance: expression.kind === 'extrude' ? this.evaluateLength(expression.length) : undefined,
+                    inputs: this.solidInputs(expression),
+                    solidCount: this.countSolids(shape),
+                    sourceId: expression.sourceId,
+                })
             } catch (error) {
                 this.captureError(error, binding.expression.span)
             }
         }
 
         const roots: EvaluatedRoot[] = []
+        const published = new Set<string>()
         for (const root of this.program.roots) {
             const artifact = this.artifacts.get(root.reference)
-            if (artifact?.kind !== 'solid') {
+            if (artifact?.kind !== 'solid' || published.has(root.reference)) {
                 continue
             }
+            published.add(root.reference)
 
             roots.push({
                 name: root.reference,
                 label: root.label,
                 shape: artifact.shape,
                 sourceId: root.sourceId,
+                solidCount: artifact.solidCount,
             })
         }
 
@@ -189,6 +210,9 @@ class Evaluator {
             name,
             drawing,
             plane: expression.plane,
+            origin: expression.origin
+                ? expression.origin.values.map((value) => this.evaluateLength(value)) as [number, number, number]
+                : [0, 0, 0],
             sourceId: expression.sourceId,
         }
     }
@@ -259,16 +283,15 @@ class Evaluator {
             )
         }
 
+        this.validateLineProfile(profile)
+
         return pen.close()
     }
 
-    private evaluateExtrude(
-        name: string,
-        expression: ExtrudeExpression,
-    ): EvaluatedSolidArtifact | null {
+    private evaluateExtrude(expression: ExtrudeExpression): Shape3D {
         const profile = this.artifacts.get(expression.profile)
         if (profile?.kind !== 'sketch') {
-            return null
+            throw new EvaluationFault('TCD-G005', `Sketch "${expression.profile}" could not be built.`, expression.span)
         }
 
         const distance = this.evaluateLength(expression.length)
@@ -280,25 +303,140 @@ class Evaluator {
             )
         }
 
-        const sketch = profile.drawing.sketchOnPlane(profile.plane)
-        let shape = sketch.extrude(distance).asShape3D()
+        const sketch = profile.drawing.sketchOnPlane(profile.plane, profile.origin)
+        let shape: Shape3D | undefined
+        try {
+            shape = sketch.extrude(distance).asShape3D()
+            if (expression.symmetric) {
+                const normal = PLANE_NORMALS[profile.plane]
+                shape = shape.translate(
+                    normal[0] * -distance / 2,
+                    normal[1] * -distance / 2,
+                    normal[2] * -distance / 2,
+                )
+            }
+            return shape
+        } catch (error) {
+            shape?.delete()
+            throw error
+        } finally {
+            if (sketch instanceof Sketches) {
+                for (const item of sketch.sketches) item.delete()
+            } else if ('delete' in sketch && typeof sketch.delete === 'function') {
+                sketch.delete()
+            }
+        }
+    }
 
-        if (expression.symmetric) {
-            const normal = PLANE_NORMALS[profile.plane]
-            shape = shape.translate(
-                normal[0] * -distance / 2,
-                normal[1] * -distance / 2,
-                normal[2] * -distance / 2,
+    private evaluateSolid(expression: SolidExpression): Shape3D {
+        const shape = expression.kind === 'extrude'
+            ? this.evaluateExtrude(expression)
+            : this.evaluateBoolean(expression)
+        try {
+            this.validateSolid(shape, expression.span)
+            return shape
+        } catch (error) {
+            shape.delete()
+            throw error
+        }
+    }
+
+    private evaluateOperand(operand: SolidOperand): Shape3D {
+        if (operand.kind !== 'solidReference') return this.evaluateSolid(operand)
+        const artifact = this.artifacts.get(operand.name)
+        if (artifact?.kind !== 'solid') {
+            throw new EvaluationFault('TCD-G005', `Solid "${operand.name}" could not be built.`, operand.span)
+        }
+        return artifact.shape.clone()
+    }
+
+    private evaluateBoolean(expression: BooleanExpression): Shape3D {
+        let result = this.evaluateOperand(expression.operands[0])
+        try {
+            for (const operand of expression.operands.slice(1)) {
+                const tool = this.evaluateOperand(operand)
+                try {
+                    const next = expression.kind === 'union'
+                        ? result.fuse(tool)
+                        : expression.kind === 'cut'
+                            ? result.cut(tool)
+                            : result.intersect(tool)
+                    result.delete()
+                    result = next
+                    this.validateSolid(result, expression.span)
+                } finally {
+                    tool.delete()
+                }
+            }
+            return result
+        } catch (error) {
+            result.delete()
+            throw error
+        }
+    }
+
+    private solidInputs(expression: SolidExpression): string[] {
+        if (expression.kind === 'extrude') return [expression.profile]
+        return [...new Set(expression.operands.flatMap((operand) => (
+            operand.kind === 'solidReference' ? [operand.name] : this.solidInputs(operand)
+        )))]
+    }
+
+    private countSolids(shape: Shape3D): number {
+        const solids = shape.solids
+        try {
+            return solids.length
+        } finally {
+            for (const solid of solids) solid.delete()
+        }
+    }
+
+    private validateSolid(shape: Shape3D, span: SourceSpan) {
+        if (shape.isNull || this.countSolids(shape) === 0
+            || Math.abs(measureVolume(shape)) <= this.tolerance ** 3) {
+            throw new EvaluationFault(
+                'TCD-G006',
+                'Operation produced no solid volume. Check whether the operands overlap or the cut removes the entire body.',
+                span,
             )
         }
+        const checker = new (getOC().BRepCheck_Analyzer)(shape.wrapped, true, false, false)
+        try {
+            if (!checker.IsValid()) {
+                throw new EvaluationFault('TCD-G007', 'CAD operation produced invalid topology or self-intersecting geometry.', span)
+            }
+        } finally {
+            checker.delete()
+        }
+    }
 
-        return {
-            kind: 'solid',
-            name,
-            shape,
-            operation: 'extrude',
-            distance,
-            sourceId: expression.sourceId,
+    private validateLineProfile(profile: ProfileExpression) {
+        if (!profile.curves.every((curve) => curve.kind === 'line')) return
+        const segments = profile.curves.map((curve) => ({
+            start: this.evaluatePoint(curve.start), end: this.evaluatePoint(curve.end),
+        }))
+        const orientation = (a: Point2, b: Point2, c: Point2) => (
+            (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+        )
+        const onSegment = (a: Point2, b: Point2, p: Point2) => (
+            Math.abs(orientation(a, b, p)) <= this.tolerance
+            && p[0] >= Math.min(a[0], b[0]) - this.tolerance
+            && p[0] <= Math.max(a[0], b[0]) + this.tolerance
+            && p[1] >= Math.min(a[1], b[1]) - this.tolerance
+            && p[1] <= Math.max(a[1], b[1]) + this.tolerance
+        )
+        for (let i = 0; i < segments.length; i += 1) {
+            const { start: a, end: b } = segments[i]
+            for (let j = i + 2; j < segments.length; j += 1) {
+                if (i === 0 && j === segments.length - 1) continue
+                const { start: c, end: d } = segments[j]
+                const crosses = orientation(a, b, c) * orientation(a, b, d) < 0
+                    && orientation(c, d, a) * orientation(c, d, b) < 0
+                if (crosses || onSegment(a, b, c) || onSegment(a, b, d)
+                    || onSegment(c, d, a) || onSegment(c, d, b)) {
+                    throw new EvaluationFault('TCD-G003', 'Profile contains intersecting non-adjacent line segments.', profile.span)
+                }
+            }
         }
     }
 

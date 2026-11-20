@@ -5,13 +5,14 @@ import PanelResizer from './components/PanelResizer/PanelResizer'
 import RightPanel from './components/RightPanel/RightPanel'
 import Viewport, { type ViewportStatus } from './components/Viewport/Viewport'
 import { initCad } from './cad/initCad'
-import { meshCadModel } from './cad/meshCadModel'
+import { meshCadModels } from './cad/meshCadModel'
 import {
     analyzeTextCad,
     evaluateTextCad,
     parseTextCad,
     type Diagnostic,
     type EvaluationResult,
+    type EvaluatedSolidArtifact,
 } from './dsl'
 import {
     openTextCadDocument,
@@ -22,15 +23,17 @@ import {
 import starSource from '../docs/dsl/examples/star.textcad?raw'
 import './App.css'
 
-type MeshData = ReturnType<typeof meshCadModel>
+type MeshData = ReturnType<typeof meshCadModels>
 type AppTheme = 'dark' | 'light'
 
 type ModelInfo = {
     sketches: string[]
     bodies: Array<{
         name: string
-        operation: 'extrude'
-        distance: number
+        operation: EvaluatedSolidArtifact['operation']
+        distance?: number
+        inputs: string[]
+        published: boolean
     }>
 }
 
@@ -222,7 +225,7 @@ function App() {
 
                 let meshData: MeshData
                 try {
-                    meshData = meshCadModel(root.shape)
+                    meshData = meshCadModels(evaluated.roots)
                 } finally {
                     disposeSolids(evaluated)
                 }
@@ -232,10 +235,12 @@ function App() {
                         .map(({ name }) => name),
                     bodies: evaluated.artifacts
                         .filter((artifact) => artifact.kind === 'solid')
-                        .map(({ name, operation, distance }) => ({
+                        .map(({ name, operation, distance, inputs }) => ({
                             name,
                             operation,
                             distance,
+                            inputs,
+                            published: evaluated.roots.some((item) => item.name === name),
                         })),
                 }
                 if (!isCurrentRevision()) return

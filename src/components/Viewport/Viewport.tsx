@@ -7,6 +7,7 @@ type MeshData = {
     vertices: number[]
     normals: number[]
     triangles: number[]
+    bodyCount: number
 }
 
 export type ViewportStatus = {
@@ -32,8 +33,11 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
     const modelRef = useRef<THREE.Mesh | null>(null)
     const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null)
 
-    // The current DSL builds a single solid; future multi-solid models can extend this count.
-    const bodyCount = mesh ? 1 : 0
+    const bodyCount = mesh?.bodyCount ?? 0
+    const bodyCountMod100 = bodyCount % 100
+    const bodyLabel = bodyCountMod100 >= 11 && bodyCountMod100 <= 14
+        ? 'тел'
+        : bodyCount % 10 === 1 ? 'тело' : bodyCount % 10 >= 2 && bodyCount % 10 <= 4 ? 'тела' : 'тел'
     const triangleCount = mesh ? Math.floor(mesh.triangles.length / 3) : 0
 
     useEffect(() => {
@@ -433,7 +437,7 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
                 <div className="viewport__model-info">
                     <span className="viewport__model-icon" aria-hidden="true">▣</span>
                     <span>
-                        {bodyCount} {bodyCount === 1 ? 'тело' : 'тел'}
+                        {bodyCount} {bodyLabel}
                         {' · '}
                         {triangleCount.toLocaleString('ru-RU')} трис
                     </span>

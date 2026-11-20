@@ -22,6 +22,8 @@ export type GeometryDiagnosticCode =
     | 'TCD-G003'
     | 'TCD-G004'
     | 'TCD-G005'
+    | 'TCD-G006'
+    | 'TCD-G007'
 
 export type SourcePosition = {
     offset: number

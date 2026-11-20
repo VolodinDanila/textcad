@@ -1,11 +1,21 @@
 import { useState } from 'react'
+import type { EvaluatedSolidArtifact } from '../../dsl'
 import './LeftTree.css'
 
 type BodyItem = {
     name: string
-    operation: 'extrude'
-    distance: number
+    operation: EvaluatedSolidArtifact['operation']
+    distance?: number
+    inputs: string[]
+    published: boolean
 }
+
+const OPERATION_LABELS = {
+    extrude: 'Выдавливание',
+    union: 'Объединение',
+    cut: 'Вычитание',
+    intersect: 'Пересечение',
+} as const
 
 type LeftTreeProps = {
     documentName: string
@@ -158,7 +168,7 @@ function LeftTree({
 
                         {renderRow({
                             id: 'bodies',
-                            label: 'Тела',
+                            label: 'Тела и операции',
                             depth: 1,
                             icon: 'folder',
                             expandable: 'bodies',
@@ -170,7 +180,7 @@ function LeftTree({
                                 <div key={bodyNode}>
                                     {renderRow({
                                         id: bodyNode,
-                                        label: body.name,
+                                        label: `${body.name}${body.published ? ' · результат' : ''}`,
                                         depth: 2,
                                         icon: 'body',
                                         expandable: bodyNode,
@@ -178,10 +188,16 @@ function LeftTree({
 
                                     {!collapsedNodes.has(bodyNode) && renderRow({
                                         id: `feature:${body.name}`,
-                                        label: `Extrude · ${body.distance} мм`,
+                                        label: `${OPERATION_LABELS[body.operation]}${body.distance !== undefined ? ` · ${body.distance} мм` : ''}`,
                                         depth: 3,
                                         icon: 'feature',
                                     })}
+                                    {!collapsedNodes.has(bodyNode) && body.inputs.map((input, index) => renderRow({
+                                        id: `input:${body.name}:${index}`,
+                                        label: `← ${input}`,
+                                        depth: 4,
+                                        icon: 'feature',
+                                    }))}
                                 </div>
                             )
                         })}
@@ -191,7 +207,7 @@ function LeftTree({
 
             <div className="left-tree__footer" data-stale={isStale || undefined}>
                 <span className="left-tree__footer-dot" aria-hidden="true" />
-                {bodies.length} {countLabel(bodies.length, 'тело', 'тела', 'тел')}
+                {bodies.length} {countLabel(bodies.length, 'операция', 'операции', 'операций')}
                 {' · '}
                 {sketches.length} {countLabel(sketches.length, 'эскиз', 'эскиза', 'эскизов')}
             </div>

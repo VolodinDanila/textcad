@@ -50,6 +50,13 @@ export type Point2Expression = {
     span: SourceSpan
 }
 
+export type Point3Expression = {
+    kind: 'point3'
+    values: [LengthExpression, LengthExpression, LengthExpression]
+    sourceId: NodeId
+    span: SourceSpan
+}
+
 export type LineExpression = {
     kind: 'line'
     start: Point2Expression
@@ -88,6 +95,7 @@ export type ProfileExpression = {
 export type SketchExpression = {
     kind: 'sketch'
     plane: 'XY' | 'XZ' | 'YZ'
+    origin?: Point3Expression
     profiles: ProfileExpression[]
     sourceId: NodeId
     span: SourceSpan
@@ -102,7 +110,23 @@ export type ExtrudeExpression = {
     span: SourceSpan
 }
 
-export type FeatureExpression = SketchExpression | ExtrudeExpression
+export type SolidReference = {
+    kind: 'solidReference'
+    name: string
+    sourceId: NodeId
+    span: SourceSpan
+}
+
+export type BooleanExpression = {
+    kind: 'union' | 'cut' | 'intersect'
+    operands: SolidOperand[]
+    sourceId: NodeId
+    span: SourceSpan
+}
+
+export type SolidExpression = ExtrudeExpression | BooleanExpression
+export type SolidOperand = SolidReference | SolidExpression
+export type FeatureExpression = SketchExpression | SolidExpression
 
 export type SemanticParameter = {
     name: string
@@ -155,7 +179,9 @@ type SymbolInfo = {
 }
 
 const TOP_LEVEL_COMMANDS = new Set(['textcad', 'param', 'let', 'root'])
-const EXPRESSION_COMMANDS = new Set(['sketch', 'profile', 'line', 'arc', 'circle', 'extrude'])
+const EXPRESSION_COMMANDS = new Set([
+    'sketch', 'profile', 'line', 'arc', 'circle', 'extrude', 'union', 'cut', 'intersect',
+])
 const KNOWN_COMMANDS = new Set([...TOP_LEVEL_COMMANDS, ...EXPRESSION_COMMANDS])
 
 class SemanticAnalyzer {
@@ -349,7 +375,7 @@ class SemanticAnalyzer {
         const expression = this.analyzeFeatureExpression(expressionNode, formIndex)
         const valueType = expression?.kind === 'sketch'
             ? 'sketch'
-            : expression?.kind === 'extrude'
+            : expression
                 ? 'solid'
                 : 'unknown'
 
@@ -408,6 +434,10 @@ class SemanticAnalyzer {
                 return this.analyzeSketch(form, formIndex)
             case 'extrude':
                 return this.analyzeExtrude(form, formIndex)
+            case 'union':
+            case 'cut':
+            case 'intersect':
+                return this.analyzeBoolean(form, formIndex, command.value)
             default:
                 if (KNOWN_COMMANDS.has(command.value)) {
                     this.report(
@@ -423,8 +453,10 @@ class SemanticAnalyzer {
     }
 
     private analyzeSketch(form: ListNode, formIndex: number): SketchExpression | null {
-        const args = this.collectArguments(form, ['plane'])
+        const args = this.collectArguments(form, ['plane', 'origin'])
         const planeValue = this.requiredNamed(args, 'plane', form)
+        const originValue = args.named.get('origin')?.value
+        const origin = originValue ? this.point3(originValue, formIndex) : undefined
         let plane: SketchExpression['plane'] | null = null
 
         if (planeValue) {
@@ -465,7 +497,47 @@ class SemanticAnalyzer {
         }
 
         return plane && profiles.length > 0
-            ? { kind: 'sketch', plane, profiles, sourceId: form.id, span: form.span }
+            ? { kind: 'sketch', plane, origin: origin ?? undefined, profiles, sourceId: form.id, span: form.span }
+            : null
+    }
+
+    private analyzeBoolean(
+        form: ListNode,
+        formIndex: number,
+        kind: BooleanExpression['kind'],
+    ): BooleanExpression | null {
+        const args = this.collectArguments(form, [])
+        if (args.positional.length < 2 || args.positional.length > 32) {
+            this.report(
+                args.positional.length < 2 ? 'TCD-S004' : 'TCD-S006',
+                `${kind} requires between 2 and 32 solid operands.`,
+                form.span,
+            )
+            return null
+        }
+
+        const operands: SolidOperand[] = []
+        for (const value of args.positional) {
+            if (value.kind === 'identifier') {
+                if (this.resolveReference(value, formIndex, ['solid'], kind)) {
+                    operands.push({
+                        kind: 'solidReference', name: value.value, sourceId: value.id, span: value.span,
+                    })
+                }
+            } else if (value.kind === 'list') {
+                const expression = this.analyzeFeatureExpression(value, formIndex)
+                if (expression?.kind === 'sketch') {
+                    this.typeError(value, `${kind} expects a solid, not a sketch.`)
+                } else if (expression) {
+                    operands.push(expression)
+                }
+            } else {
+                this.typeError(value, `${kind} expects a solid reference or a solid operation.`)
+            }
+        }
+
+        return operands.length === args.positional.length
+            ? { kind, operands, sourceId: form.id, span: form.span }
             : null
     }
 
@@ -626,6 +698,23 @@ class SemanticAnalyzer {
         const y = this.lengthExpression(values[1], formIndex)
         return x && y
             ? { kind: 'point2', values: [x, y], sourceId: value.id, span: value.span }
+            : null
+    }
+
+    private point3(value: ValueNode, formIndex: number): Point3Expression | null {
+        if (value.kind !== 'list' || value.items.length !== 3
+            || value.items.some((item) => item.kind === 'namedArgument')) {
+            this.typeError(value, 'origin must contain exactly three length values [x y z].')
+            return null
+        }
+        const values = (value.items as ValueNode[]).map((item) => this.lengthExpression(item, formIndex))
+        return values.every((item) => item !== null)
+            ? {
+                kind: 'point3',
+                values: values as [LengthExpression, LengthExpression, LengthExpression],
+                sourceId: value.id,
+                span: value.span,
+            }
             : null
     }
 

@@ -1,7 +1,8 @@
 # TextCAD DSL
 
-Статус: **черновик спецификации v0**. Синтаксис ещё не реализован в приложении и
-может измениться после ревью примеров.
+Статус: **экспериментальное исполняемое ядро**. Parser, Semantic и Evaluator
+реализованы; актуальный список работающих команд указан в [commands.md](commands.md).
+Заголовок документов — `version=1`, старые файлы совместимы.
 
 TextCAD DSL — компактный source-first язык описания параметрических CAD-моделей.
 Текст `.textcad` является единственным источником истины. Дерево операций,
@@ -28,12 +29,20 @@ Replicad-геометрия, mesh для Three.js и диагностическ�
 - fillet, chamfer и паттерны;
 - автоматическое выполнение кода, созданного Chat, без подтверждения.
 
+Согласованные расширения (новая геометрия эскизов, вращение, loft, обработка тел,
+преобразования, массивы и селекторы) внедряются поэтапно. Сейчас первым этапом
+реализованы смещение эскиза через `origin`, несколько отображаемых `root`
+и булевы операции `union`, `cut`, `intersect`. Отдельные объёмные примитивы
+`box`, `cylinder`, `cone`, `sphere`, `torus` в согласованное ядро не входят.
+
 ## Конвейер
 
 ```text
 DSL source
     ↓
 Parser → AST с source spans
+    ↓
+Semantic → проверенная программа
     ↓
 Evaluator → Replicad values
     ↓
@@ -55,16 +64,17 @@ DSL-текста, которое проходит через тот же parser 
 - [commands.md](commands.md) — команды первой версии;
 - [diagnostics.md](diagnostics.md) — формат ошибок и поведение при сбое;
 - [examples/star.textcad](examples/star.textcad) — первая модель для реализации;
+- [examples/boolean-demo.textcad](examples/boolean-demo.textcad) — основание,
+  выступ на смещённом эскизе, объединение и сквозное вычитание;
+- [examples/multiple-roots.textcad](examples/multiple-roots.textcad) — несколько
+  независимых эскизов и одновременно отображаемых результатов;
 - [examples/motor-bracket.textcad](examples/motor-bracket.textcad) — направление
   расширения языка после v0.
 
-## План реализации
+## Текущая реализация
 
-1. Parser и AST без зависимости от Replicad.
-2. Parser tests и parse/format round-trip tests.
-3. Evaluator для `sketch`, `profile`, `line`, `arc`, `circle`, `extrude`.
-4. Перенос текущей звезды в `star.textcad`.
-5. Редактирование Source и запуск по `Ctrl+Enter`.
-6. Дерево, построенное из AST и EvaluationResult.
-7. Примитивы, transforms и boolean-операции.
+Parser и Semantic выполняются до построения геометрии. Source пересчитывается
+при изменении, дерево показывает эскизы, операции и зависимости. Только `root`
+публикует геометрию во Viewport. Булевы операции проверяются CAD-ядром; пустой
+или некорректный результат не заменяет последнюю успешно построенную модель.
 
