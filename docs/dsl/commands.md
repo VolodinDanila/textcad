@@ -1,6 +1,8 @@
 # Команды TextCAD DSL
 
-Статус всех команд ниже: **specified, not implemented**.
+Команды от `textcad` до `extrude`, описанные ниже, реализованы в Parser,
+Semantic и Evaluator DSL v0. Команды из раздела «Зарезервировано для следующего
+этапа» пока не реализованы.
 
 ## Заголовок `textcad`
 

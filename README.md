@@ -1,75 +1,161 @@
-# React + TypeScript + Vite
+# TextCAD · ТекстВСАПР
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Экспериментальный CAD-редактор в браузере: модель задаётся текстом `.textcad`,
+строится через Replicad/OpenCascade и отображается в Three.js. Менять геометрию
+можно вручную во вкладке **Source** или через ИИ-помощника во вкладке **Chat**.
 
-Currently, two official plugins are available:
+Исходный текст — основа модели. ИИ предлагает новый документ, приложение проверяет
+его и показывает diff; применение изменений всегда остаётся за пользователем.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Что уже работает
 
-## React Compiler
+- Редактирование Source с пересчётом модели и диагностикой ошибок.
+- Эскизы на плоскостях `XY`, `XZ`, `YZ`: линии, дуги, окружности и отверстия.
+- Выдавливание профиля, в том числе симметричное, и именованные параметры.
+- Создание, открытие и сохранение файлов `.textcad` через меню **File**.
+- Сохранение черновика в браузере; при ошибке в Source продолжает отображаться
+  последняя успешно построенная геометрия.
+- Чат с контекстом текущего документа, проверкой предложений и кнопками
+  **Применить** / **Отклонить**. Длинный diff прокручивается отдельно от кнопок.
+- Светлая и тёмная темы, скрываемые и изменяемые по ширине боковые панели.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Быстрый запуск
 
-## Expanding the ESLint configuration
+Проект проверен на Windows PowerShell с Node.js **22.20.0** и npm.
+Редактор и CAD-ядро работают без настройки ИИ-провайдера.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Откройте адрес из терминала — обычно `http://127.0.0.1:5173`.
+При первом запуске загружается пример звезды, при следующих — сохранённый черновик.
+Рабочий пример — [star.textcad](docs/dsl/examples/star.textcad).
+`motor-bracket.textcad` в том же каталоге описывает будущие расширения языка
+и пока не исполняется целиком.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Как пользоваться
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Откройте `.textcad` через **File → Open…** или отредактируйте **Source** справа.
+2. Для изменения через ИИ откройте **Chat** и опишите результат, например:
+   «замени цилиндр на куб» или «увеличь высоту на 5 мм».
+3. Проверьте предложенный diff и нажмите **Применить** или **Отклонить**.
+4. Сохраните результат через **File → Save** (`Ctrl+S`).
 
+В чате `Enter` отправляет сообщение, `Shift+Enter` добавляет строку.
+Открытие файла — `Ctrl+O`, сохранение под новым именем — `Ctrl+Shift+S`.
+
+## Настройка ИИ
+
+Настройки находятся в `.env` и читаются сервером при запуске.
+Если этого файла ещё нет, создайте его из примера:
+
+```powershell
+Copy-Item .env.example .env
 ```
+
+После изменения настроек перезапустите `npm run dev`.
+Не добавляйте к именам секретных переменных префикс `VITE_`: он предназначен
+для настроек, доступных браузеру. Сам `.env` исключён из Git.
+
+### Antigravity CLI (`agy`)
+
+В `.env.example` выбран `AI_PROVIDER=agy`. Нужен установленный CLI,
+доступный из PowerShell, с уже выполненной авторизацией. Интеграция проверена
+с **agy 1.5.13**.
+
+```powershell
+agy --version
+agy -p "Ответь одним словом: готов" --output-format json --print-timeout 60s
+```
+
+```dotenv
+AI_PROVIDER=agy
+AGY_COMMAND=agy
+AGY_MODEL=
+AGY_EFFORT=low
+AGY_TIMEOUT_MS=120000
+```
+
+Пустой `AGY_MODEL` использует выбор модели в CLI с уровнем рассуждения из
+`AGY_EFFORT`. Чтобы зафиксировать модель, укажите её идентификатор в `AGY_MODEL`.
+Текущий выбор с тем же уровнем рассуждения можно проверить так:
+
+```powershell
+agy --effort low --print=/model --output-format json
+```
+
+Браузер обращается к локальному `/api/assistant`, а backend запускает `agy`.
+Адаптер проверяет версию и поддерживаемые флаги, передаёт запрос через stdin
+без shell, использует временную рабочую папку и строгие разрешения CLI.
+Есть таймаут и ограничение размера ответа; результат принимается через JSON Schema,
+а ответ с вызовами инструментов отклоняется. Переменные с API-ключами, токенами
+и секретами отфильтровываются из окружения дочернего процесса.
+
+Авторизация остаётся у установленного CLI. Antigravity может использовать другой
+маршрут, чем Gemini API, но не гарантирует устранение `503 High Demand`:
+перегрузка модели, квота аккаунта и сетевые ошибки всё ещё возможны.
+
+### Другие провайдеры
+
+| `AI_PROVIDER` | Канал | Основные настройки |
+| --- | --- | --- |
+| `agy` | Авторизованный Antigravity CLI | `AGY_COMMAND`, `AGY_MODEL`, `AGY_EFFORT`, `AGY_TIMEOUT_MS` |
+| `gemini` | Gemini API | `GEMINI_API_KEY`, `GEMINI_MODEL` |
+| `ollama` | Локальный сервер Ollama | `OLLAMA_URL`, `OLLAMA_MODEL` |
+| `openai` | OpenAI API | `OPENAI_API_KEY`, `OPENAI_MODEL` |
+
+Для возврата к Gemini задайте `AI_PROVIDER=gemini` с действующим ключом и моделью.
+Для Ollama запустите локальный сервер и загрузите модель, указанную в `OLLAMA_MODEL`.
+Все обращения к провайдерам выполняет backend; браузер не получает API-ключи.
+Без `AI_PROVIDER` сервер выбирает Ollama.
+
+## DSL и проверка предложений
+
+Исполняемое ядро v0 поддерживает `textcad`, `param`, `let`, `root`, `sketch`,
+`profile`, `line`, `arc`, `circle` и `extrude`. Например, цилиндр — это окружность
+в эскизе и выдавливание; отдельной команды `cylinder` пока нет.
+
+Предложенный ИИ Source проходит Parser и Semantic на backend, затем те же проверки
+и Evaluator с CAD-ядром в браузере. Только после успешной проверки появляется diff.
+Если документ изменился во время запроса, устаревшее предложение не применяется.
+
+Boolean-операции над телами, трансформации, скругления, фаски, паттерны и сборки
+пока не реализованы. Часть пунктов меню зарезервирована под будущие возможности.
+Синтаксис и контракт языка описаны в [документации DSL](docs/dsl/README.md),
+реализованные команды — в [commands.md](docs/dsl/commands.md).
+
+## Проверки и сборка
+
+```powershell
+npm test
+npm run lint
+npm run build
+```
+
+Тесты проверяют Parser, Semantic, CAD-геометрию, сохранение файлов, diff и обработку
+ответов провайдеров. Они не требуют API-ключей и не вызывают внешние модели.
+
+```powershell
+npm run preview -- --host 127.0.0.1
+```
+
+`preview` запускает локальный просмотр сборки вместе с AI-маршрутом.
+Одна статическая папка `dist` не содержит backend: при отдельном размещении
+для ИИ потребуется серверный маршрут `/api/assistant`.
+
+## Структура проекта
+
+| Каталог | Назначение |
+| --- | --- |
+| `src/dsl` | AST, Parser, Semantic, Evaluator и диагностика |
+| `src/cad` | Инициализация OpenCascade и подготовка mesh |
+| `src/components` | Интерфейс редактора, дерева и 3D-вьювера |
+| `src/files` | Открытие и сохранение `.textcad` |
+| `src/ai` | Браузерный клиент и построение diff |
+| `server` | Локальный AI-маршрут и адаптеры провайдеров |
+| `docs/dsl` | Спецификация языка и примеры |
+| `tests` | Автоматические проверки |
+
+Стек: **React · TypeScript · Vite · Replicad/OpenCascade · Three.js**.

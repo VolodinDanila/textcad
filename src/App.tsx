@@ -378,6 +378,37 @@ function App() {
         }
     }, [documentSession.source, handleSaveDocumentAs])
 
+    const validateAiProposal = useCallback(async (candidateSource: string) => {
+        const revisionId = 0
+
+        try {
+            await initCad()
+            const parsed = parseTextCad(candidateSource, { revisionId })
+            if (parsed.diagnostics.length > 0) return parsed.diagnostics
+
+            const analyzed = analyzeTextCad(parsed.document, { revisionId })
+            if (analyzed.diagnostics.length > 0) return analyzed.diagnostics
+
+            const evaluated = evaluateTextCad(analyzed.program, { revisionId })
+            if (evaluated.diagnostics.length > 0) {
+                disposeSolids(evaluated)
+                return evaluated.diagnostics
+            }
+            if (!evaluated.roots[0]) {
+                disposeSolids(evaluated)
+                return [runtimeDiagnostic('DSL не опубликовал корневую модель.', revisionId)]
+            }
+
+            disposeSolids(evaluated)
+            return []
+        } catch (error) {
+            return [runtimeDiagnostic(
+                error instanceof Error ? error.message : 'Не удалось проверить предложение ИИ.',
+                revisionId,
+            )]
+        }
+    }, [])
+
     return (
         <main className="app-shell" data-theme={theme}>
             <AppHeader
@@ -433,11 +464,13 @@ function App() {
 
                 {isRightPanelOpen && (
                     <RightPanel
+                        documentName={documentSession.name}
                         source={source}
                         diagnostics={diagnostics}
                         sourceState={sourceState}
                         width={rightPanelWidth}
                         onSourceChange={handleSourceChange}
+                        onValidateProposal={validateAiProposal}
                         onClose={() => setIsRightPanelOpen(false)}
                     />
                 )}

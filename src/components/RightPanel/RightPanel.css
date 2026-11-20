@@ -11,6 +11,11 @@
     box-shadow: -8px 0 24px rgb(0 0 0 / 10%);
 }
 
+.right-panel,
+.right-panel * {
+    box-sizing: border-box;
+}
+
 .right-panel__header {
     height: 46px;
     flex: 0 0 46px;
@@ -160,12 +165,29 @@
 }
 
 .right-panel__content--chat {
-    display: grid;
-    place-items: center;
-    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.right-panel__chat-messages {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: auto;
+    padding: 14px 12px;
+    scrollbar-color: #3a3e45 transparent;
+    scrollbar-width: thin;
+}
+
+.right-panel__chat-messages > * {
+    flex-shrink: 0;
 }
 
 .right-panel__empty {
+    margin: auto;
     max-width: 220px;
     display: flex;
     flex-direction: column;
@@ -186,6 +208,227 @@
 .right-panel__empty-icon {
     color: #bda1e6;
     font-size: 25px;
+}
+
+.right-panel__message {
+    max-width: 92%;
+    padding: 9px 11px;
+    border: 1px solid #30343b;
+    border-radius: 9px;
+    color: #d6dae2;
+    background: #17191d;
+    font-size: 12px;
+    line-height: 1.48;
+}
+
+.right-panel__message--user {
+    align-self: flex-end;
+    color: #eee7f8;
+    background: #2a2334;
+    border-color: #463756;
+}
+
+.right-panel__message--assistant {
+    align-self: flex-start;
+}
+
+.right-panel__message-author {
+    display: block;
+    margin-bottom: 4px;
+    color: #a996c4;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.right-panel__message p {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.right-panel__thinking {
+    width: fit-content;
+    display: flex;
+    gap: 4px;
+    padding: 9px 11px;
+    border: 1px solid #30343b;
+    border-radius: 9px;
+    background: #17191d;
+}
+
+.right-panel__thinking span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #bda1e6;
+    animation: right-panel-thinking 0.9s ease-in-out infinite alternate;
+}
+
+.right-panel__thinking span:nth-child(2) { animation-delay: 0.15s; }
+.right-panel__thinking span:nth-child(3) { animation-delay: 0.3s; }
+
+.right-panel__chat-error {
+    padding: 9px 10px;
+    border: 1px solid #5f3542;
+    border-radius: 7px;
+    color: #efb4c3;
+    background: #28171c;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.right-panel__proposal {
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 140px;
+    max-height: min(50%, 340px);
+    margin: 0 12px 12px;
+    overflow: hidden;
+    border: 1px solid #4b3d5b;
+    border-radius: 8px;
+    background: #121317;
+}
+
+.right-panel__proposal-header {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 9px 10px;
+    border-bottom: 1px solid #36303e;
+}
+
+.right-panel__proposal-header strong {
+    color: #dac9ee;
+    font-size: 11px;
+}
+
+.right-panel__proposal-header span {
+    color: #8d929c;
+    font-size: 9px;
+}
+
+.right-panel__diff {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 5px 0;
+    font: 500 10px/1.45 "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    scrollbar-width: thin;
+}
+
+.right-panel__diff-line {
+    min-width: max-content;
+    display: flex;
+    white-space: pre;
+}
+
+.right-panel__diff-line[data-kind="add"] {
+    color: #b8e5c9;
+    background: #15241c;
+}
+
+.right-panel__diff-line[data-kind="remove"] {
+    color: #edb8c5;
+    background: #29181e;
+}
+
+.right-panel__diff-marker {
+    width: 20px;
+    flex: 0 0 20px;
+    text-align: center;
+    user-select: none;
+}
+
+.right-panel__proposal-actions {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+    padding: 8px;
+    border-top: 1px solid #30343b;
+}
+
+.right-panel__proposal-actions button,
+.right-panel__composer button {
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid #454953;
+    border-radius: 5px;
+    color: #c9cdd5;
+    background: #22252b;
+    font: 600 10px/1 inherit;
+    cursor: pointer;
+}
+
+.right-panel__proposal-actions button:hover,
+.right-panel__composer button:hover:not(:disabled) {
+    color: #ffffff;
+    background: #2c3037;
+}
+
+.right-panel__proposal-actions button[data-primary],
+.right-panel__composer button {
+    color: #f5effc;
+    background: #675080;
+    border-color: #80659d;
+}
+
+.right-panel__proposal-actions button[data-primary]:hover,
+.right-panel__composer button:hover:not(:disabled) {
+    background: #775d93;
+}
+
+.right-panel__composer {
+    flex: 0 0 auto;
+    padding: 9px 10px 8px;
+    background: #15171b;
+    border-top: 1px solid #30343b;
+}
+
+.right-panel__composer textarea {
+    width: 100%;
+    min-height: 58px;
+    max-height: 140px;
+    resize: vertical;
+    padding: 8px 9px;
+    border: 1px solid #3b3f47;
+    border-radius: 6px;
+    outline: 0;
+    color: #e8e9ed;
+    background: #0f1013;
+    font: 400 11px/1.45 inherit;
+    caret-color: #d6bded;
+}
+
+.right-panel__composer textarea:focus {
+    border-color: #80659d;
+    box-shadow: 0 0 0 2px rgb(189 161 230 / 14%);
+}
+
+.right-panel__composer textarea::placeholder {
+    color: #717782;
+}
+
+.right-panel__composer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 7px;
+}
+
+.right-panel__composer-footer > span {
+    color: #737986;
+    font-size: 8px;
+    line-height: 1.25;
+}
+
+.right-panel__composer button:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .right-panel__status {
@@ -224,6 +467,11 @@
 @keyframes right-panel-pulse {
     from { opacity: 0.45; }
     to { opacity: 1; }
+}
+
+@keyframes right-panel-thinking {
+    from { opacity: 0.35; transform: translateY(1px); }
+    to { opacity: 1; transform: translateY(-1px); }
 }
 
 @media (max-width: 760px) {

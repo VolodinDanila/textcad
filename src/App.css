@@ -234,6 +234,87 @@
     color: #a98bd4;
 }
 
+.app-shell[data-theme="light"] .right-panel__message,
+.app-shell[data-theme="light"] .right-panel__thinking {
+    color: #3f4651;
+    background: #ffffff;
+    border-color: #d9dde4;
+}
+
+.app-shell[data-theme="light"] .right-panel__message--user {
+    color: #43354f;
+    background: #eee8f6;
+    border-color: #d8c8e9;
+}
+
+.app-shell[data-theme="light"] .right-panel__message-author {
+    color: #8466a8;
+}
+
+.app-shell[data-theme="light"] .right-panel__chat-error {
+    color: #8b3f53;
+    background: #fff3f6;
+    border-color: #e5c2cb;
+}
+
+.app-shell[data-theme="light"] .right-panel__proposal {
+    background: #ffffff;
+    border-color: #d4c3e5;
+}
+
+.app-shell[data-theme="light"] .right-panel__proposal-header,
+.app-shell[data-theme="light"] .right-panel__proposal-actions {
+    border-color: #e0e2e7;
+}
+
+.app-shell[data-theme="light"] .right-panel__proposal-header strong {
+    color: #654784;
+}
+
+.app-shell[data-theme="light"] .right-panel__proposal-header span {
+    color: #777f8b;
+}
+
+.app-shell[data-theme="light"] .right-panel__diff-line[data-kind="add"] {
+    color: #23613e;
+    background: #eaf7ef;
+}
+
+.app-shell[data-theme="light"] .right-panel__diff-line[data-kind="remove"] {
+    color: #8b3f53;
+    background: #fff0f3;
+}
+
+.app-shell[data-theme="light"] .right-panel__proposal-actions button {
+    color: #555d69;
+    background: #f3f4f6;
+    border-color: #d5d9df;
+}
+
+.app-shell[data-theme="light"] .right-panel__proposal-actions button[data-primary],
+.app-shell[data-theme="light"] .right-panel__composer button {
+    color: #ffffff;
+    background: #8b70ad;
+    border-color: #7d609f;
+}
+
+.app-shell[data-theme="light"] .right-panel__composer {
+    background: #f7f8fa;
+    border-color: #d9dde4;
+}
+
+.app-shell[data-theme="light"] .right-panel__composer textarea {
+    color: #333944;
+    background: #ffffff;
+    border-color: #cfd4dc;
+    caret-color: #664484;
+}
+
+.app-shell[data-theme="light"] .right-panel__composer textarea:focus {
+    border-color: #9a7ebc;
+    box-shadow: 0 0 0 2px rgb(169 139 212 / 18%);
+}
+
 .app-shell[data-theme="light"] .viewport {
     background: #f2f4f7;
 }
