@@ -16,13 +16,16 @@ import {
 } from './diagnostics.ts'
 import type {
     ArcExpression,
+    AxisExpression,
     BooleanExpression,
+    CircularPatternExpression,
     CurveExpression,
     ExtrudeExpression,
     LengthExpression,
     LineExpression,
     Point2Expression,
     ProfileExpression,
+    RevolveExpression,
     SemanticProgram,
     SketchExpression,
     SolidExpression,
@@ -55,6 +58,8 @@ export type EvaluatedSolidArtifact = {
     shape: Shape3D
     operation: SolidExpression['kind']
     distance?: number
+    angle?: number
+    count?: number
     inputs: string[]
     solidCount: number
     sourceId: string
@@ -141,6 +146,9 @@ class Evaluator {
                     shape,
                     operation: expression.kind,
                     distance: expression.kind === 'extrude' ? this.evaluateLength(expression.length) : undefined,
+                    angle: expression.kind === 'revolve' || expression.kind === 'pattern-circular'
+                        ? this.evaluateLength(expression.angle) : undefined,
+                    count: expression.kind === 'pattern-circular' ? this.evaluateLength(expression.count) : undefined,
                     inputs: this.solidInputs(expression),
                     solidCount: this.countSolids(shape),
                     sourceId: expression.sourceId,
@@ -331,13 +339,101 @@ class Evaluator {
     private evaluateSolid(expression: SolidExpression): Shape3D {
         const shape = expression.kind === 'extrude'
             ? this.evaluateExtrude(expression)
-            : this.evaluateBoolean(expression)
+            : expression.kind === 'revolve'
+                ? this.evaluateRevolve(expression)
+                : expression.kind === 'pattern-circular'
+                    ? this.evaluateCircularPattern(expression)
+                    : this.evaluateBoolean(expression)
         try {
             this.validateSolid(shape, expression.span)
             return shape
         } catch (error) {
             shape.delete()
             throw error
+        }
+    }
+
+    private axisDirection(axis: AxisExpression, span: SourceSpan): [number, number, number] {
+        const direction: [number, number, number] = typeof axis === 'string'
+            ? axis === 'X' ? [1, 0, 0] : axis === 'Y' ? [0, 1, 0] : [0, 0, 1]
+            : axis.values.map((value) => this.evaluateLength(value)) as [number, number, number]
+        const length = Math.hypot(...direction)
+        if (!Number.isFinite(length) || length <= this.tolerance) {
+            throw new EvaluationFault('TCD-G004', 'Axis direction must be a finite non-zero vector.', span)
+        }
+        return direction.map((value) => value / length) as [number, number, number]
+    }
+
+    private rotationAngle(value: LengthExpression, span: SourceSpan): number {
+        const angle = this.evaluateLength(value)
+        if (!Number.isFinite(angle) || Math.abs(angle) <= this.tolerance || Math.abs(angle) > 360) {
+            throw new EvaluationFault('TCD-G004', 'Rotation span must be non-zero and between -360deg and 360deg.', span)
+        }
+        return angle
+    }
+
+    private evaluateRevolve(expression: RevolveExpression): Shape3D {
+        const profile = this.artifacts.get(expression.profile)
+        if (profile?.kind !== 'sketch') {
+            throw new EvaluationFault('TCD-G005', `Sketch "${expression.profile}" could not be built.`, expression.span)
+        }
+        const axis = this.axisDirection(expression.axis, expression.span)
+        const angle = this.rotationAngle(expression.angle, expression.span)
+        const origin = expression.origin
+            ? expression.origin.values.map((value) => this.evaluateLength(value)) as [number, number, number]
+            : [0, 0, 0] as [number, number, number]
+        const sketch = profile.drawing.sketchOnPlane(profile.plane, profile.origin)
+        try {
+            return sketch.revolve(axis, { origin, angle }).asShape3D()
+        } finally {
+            if (sketch instanceof Sketches) {
+                for (const item of sketch.sketches) item.delete()
+            } else if ('delete' in sketch && typeof sketch.delete === 'function') {
+                sketch.delete()
+            }
+        }
+    }
+
+    private evaluateCircularPattern(expression: CircularPatternExpression): Shape3D {
+        const count = this.evaluateLength(expression.count)
+        if (!Number.isInteger(count) || count < 1 || count > 128) {
+            throw new EvaluationFault('TCD-G004', 'pattern-circular count must be an integer from 1 to 128, including the original.', expression.span)
+        }
+        const angle = this.rotationAngle(expression.angle, expression.span)
+        const startAngle = this.evaluateLength(expression.startAngle)
+        if (!Number.isFinite(startAngle)) {
+            throw new EvaluationFault('TCD-G004', 'pattern-circular start-angle must be finite.', expression.span)
+        }
+        const axis = this.axisDirection(expression.axis, expression.span)
+        const origin = expression.origin
+            ? expression.origin.values.map((value) => this.evaluateLength(value)) as [number, number, number]
+            : [0, 0, 0] as [number, number, number]
+        const fullCircle = Math.abs(Math.abs(angle) - 360) <= this.tolerance
+        const step = count === 1 ? 0 : angle / (fullCircle ? count : count - 1)
+        const base = this.evaluateOperand(expression.operand)
+        let result: Shape3D | undefined
+        try {
+            for (let index = 0; index < count; index += 1) {
+                let copy = base.clone()
+                try {
+                    copy = copy.rotate(startAngle + index * step, origin, axis)
+                    if (!result) {
+                        result = copy.clone()
+                    } else {
+                        const next = result.fuse(copy)
+                        result.delete()
+                        result = next
+                    }
+                } finally {
+                    copy.delete()
+                }
+            }
+            return result!
+        } catch (error) {
+            result?.delete()
+            throw error
+        } finally {
+            base.delete()
         }
     }
 
@@ -376,7 +472,11 @@ class Evaluator {
     }
 
     private solidInputs(expression: SolidExpression): string[] {
-        if (expression.kind === 'extrude') return [expression.profile]
+        if (expression.kind === 'extrude' || expression.kind === 'revolve') return [expression.profile]
+        if (expression.kind === 'pattern-circular') {
+            return expression.operand.kind === 'solidReference'
+                ? [expression.operand.name] : this.solidInputs(expression.operand)
+        }
         return [...new Set(expression.operands.flatMap((operand) => (
             operand.kind === 'solidReference' ? [operand.name] : this.solidInputs(operand)
         )))]

@@ -31,6 +31,8 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const sceneRef = useRef<THREE.Scene | null>(null)
     const modelRef = useRef<THREE.Mesh | null>(null)
+    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
+    const controlsRef = useRef<OrbitControls | null>(null)
     const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null)
 
     const bodyCount = mesh?.bodyCount ?? 0
@@ -81,6 +83,7 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
 
         camera.up.set(0, 0, 1)
         camera.position.set(80, -80, 60)
+        cameraRef.current = camera
 
         const renderer = new THREE.WebGLRenderer({
             antialias: true,
@@ -263,6 +266,7 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
         controls.enableDamping = true
         controls.target.set(0, 0, 0)
         controls.maxDistance = 1500
+        controlsRef.current = controls
 
         // Surface coordinates have priority. Otherwise, intersect the XY plane at Z = 0.
         const raycaster = new THREE.Raycaster()
@@ -363,6 +367,8 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
             renderer.dispose()
 
             sceneRef.current = null
+            cameraRef.current = null
+            controlsRef.current = null
 
             renderer.domElement.remove()
         }
@@ -417,6 +423,26 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
         modelRef.current = model
 
         scene.add(model)
+
+        // Fit all published geometry, including large rotors and offset bodies.
+        geometry.computeBoundingSphere()
+        const camera = cameraRef.current
+        const controls = controlsRef.current
+        const sphere = geometry.boundingSphere
+        if (camera && controls && sphere && sphere.radius > 0) {
+            const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov / 2)
+            const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * camera.aspect)
+            const distance = sphere.radius / Math.sin(Math.min(verticalHalfFov, horizontalHalfFov)) * 1.15
+            const direction = camera.position.clone().sub(controls.target).normalize()
+            if (direction.lengthSq() === 0) direction.set(1, -1, 0.75).normalize()
+            controls.target.copy(sphere.center)
+            camera.position.copy(sphere.center).addScaledVector(direction, distance)
+            camera.near = Math.max(0.01, sphere.radius / 1000)
+            camera.far = Math.max(1000, distance + sphere.radius * 20)
+            controls.maxDistance = Math.max(1500, distance * 5)
+            camera.updateProjectionMatrix()
+            controls.update()
+        }
 
         return () => {
             scene.remove(model)

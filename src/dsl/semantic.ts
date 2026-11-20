@@ -41,7 +41,8 @@ export type ParameterReference = {
     span: SourceSpan
 }
 
-export type LengthExpression = ScalarLiteral | ParameterReference
+export type ScalarExpression = ScalarLiteral | ParameterReference
+export type LengthExpression = ScalarExpression
 
 export type Point2Expression = {
     kind: 'point2'
@@ -110,6 +111,37 @@ export type ExtrudeExpression = {
     span: SourceSpan
 }
 
+export type Vector3Expression = {
+    kind: 'vector3'
+    values: [ScalarExpression, ScalarExpression, ScalarExpression]
+    sourceId: NodeId
+    span: SourceSpan
+}
+
+export type AxisExpression = 'X' | 'Y' | 'Z' | Vector3Expression
+
+export type RevolveExpression = {
+    kind: 'revolve'
+    profile: string
+    axis: AxisExpression
+    origin?: Point3Expression
+    angle: ScalarExpression
+    sourceId: NodeId
+    span: SourceSpan
+}
+
+export type CircularPatternExpression = {
+    kind: 'pattern-circular'
+    operand: SolidOperand
+    axis: AxisExpression
+    origin?: Point3Expression
+    count: ScalarExpression
+    angle: ScalarExpression
+    startAngle: ScalarExpression
+    sourceId: NodeId
+    span: SourceSpan
+}
+
 export type SolidReference = {
     kind: 'solidReference'
     name: string
@@ -124,7 +156,7 @@ export type BooleanExpression = {
     span: SourceSpan
 }
 
-export type SolidExpression = ExtrudeExpression | BooleanExpression
+export type SolidExpression = ExtrudeExpression | RevolveExpression | CircularPatternExpression | BooleanExpression
 export type SolidOperand = SolidReference | SolidExpression
 export type FeatureExpression = SketchExpression | SolidExpression
 
@@ -181,6 +213,7 @@ type SymbolInfo = {
 const TOP_LEVEL_COMMANDS = new Set(['textcad', 'param', 'let', 'root'])
 const EXPRESSION_COMMANDS = new Set([
     'sketch', 'profile', 'line', 'arc', 'circle', 'extrude', 'union', 'cut', 'intersect',
+    'revolve', 'pattern-circular',
 ])
 const KNOWN_COMMANDS = new Set([...TOP_LEVEL_COMMANDS, ...EXPRESSION_COMMANDS])
 
@@ -434,6 +467,10 @@ class SemanticAnalyzer {
                 return this.analyzeSketch(form, formIndex)
             case 'extrude':
                 return this.analyzeExtrude(form, formIndex)
+            case 'revolve':
+                return this.analyzeRevolve(form, formIndex)
+            case 'pattern-circular':
+                return this.analyzeCircularPattern(form, formIndex)
             case 'union':
             case 'cut':
             case 'intersect':
@@ -518,27 +555,110 @@ class SemanticAnalyzer {
 
         const operands: SolidOperand[] = []
         for (const value of args.positional) {
-            if (value.kind === 'identifier') {
-                if (this.resolveReference(value, formIndex, ['solid'], kind)) {
-                    operands.push({
-                        kind: 'solidReference', name: value.value, sourceId: value.id, span: value.span,
-                    })
-                }
-            } else if (value.kind === 'list') {
-                const expression = this.analyzeFeatureExpression(value, formIndex)
-                if (expression?.kind === 'sketch') {
-                    this.typeError(value, `${kind} expects a solid, not a sketch.`)
-                } else if (expression) {
-                    operands.push(expression)
-                }
-            } else {
-                this.typeError(value, `${kind} expects a solid reference or a solid operation.`)
-            }
+            const operand = this.solidOperand(value, formIndex, kind)
+            if (operand) operands.push(operand)
         }
 
         return operands.length === args.positional.length
             ? { kind, operands, sourceId: form.id, span: form.span }
             : null
+    }
+
+    private solidOperand(value: ValueNode, formIndex: number, context: string): SolidOperand | null {
+        if (value.kind === 'identifier') {
+            return this.resolveReference(value, formIndex, ['solid'], context)
+                ? { kind: 'solidReference', name: value.value, sourceId: value.id, span: value.span }
+                : null
+        }
+        if (value.kind === 'list') {
+            const expression = this.analyzeFeatureExpression(value, formIndex)
+            if (expression?.kind === 'sketch') {
+                this.typeError(value, `${context} expects a solid, not a sketch.`)
+            } else if (expression) {
+                return expression
+            }
+            return null
+        }
+        this.typeError(value, `${context} expects a solid reference or a solid operation.`)
+        return null
+    }
+
+    private analyzeRevolve(form: ListNode, formIndex: number): RevolveExpression | null {
+        const args = this.collectArguments(form, ['axis', 'origin', 'angle'])
+        if (!this.expectPositionalCount(args, form, 'revolve', 1)) return null
+        const profile = this.expectIdentifier(args.positional[0], 'revolve expects a sketch reference.')
+        if (!profile || !this.resolveReference(profile, formIndex, ['sketch'], 'revolve')) return null
+        const axis = this.axisArgument(args, formIndex)
+        const originValue = args.named.get('origin')?.value
+        const origin = originValue ? this.point3(originValue, formIndex) : undefined
+        const angle = this.scalarArgument(args, 'angle', 'angle', form, formIndex, 360)
+        return axis && angle
+            ? { kind: 'revolve', profile: profile.value, axis, origin: origin ?? undefined, angle, sourceId: form.id, span: form.span }
+            : null
+    }
+
+    private analyzeCircularPattern(form: ListNode, formIndex: number): CircularPatternExpression | null {
+        const args = this.collectArguments(form, ['axis', 'origin', 'count', 'angle', 'start-angle'])
+        if (!this.expectPositionalCount(args, form, 'pattern-circular', 1)) return null
+        const operand = this.solidOperand(args.positional[0], formIndex, 'pattern-circular')
+        const axis = this.axisArgument(args, formIndex)
+        const originValue = args.named.get('origin')?.value
+        const origin = originValue ? this.point3(originValue, formIndex) : undefined
+        const count = this.scalarArgument(args, 'count', 'number', form, formIndex)
+        const angle = this.scalarArgument(args, 'angle', 'angle', form, formIndex, 360)
+        const startAngle = this.scalarArgument(args, 'start-angle', 'angle', form, formIndex, 0)
+        return operand && axis && count && angle && startAngle
+            ? {
+                kind: 'pattern-circular', operand, axis, origin: origin ?? undefined,
+                count, angle, startAngle, sourceId: form.id, span: form.span,
+            }
+            : null
+    }
+
+    private axisArgument(args: Arguments, formIndex: number): AxisExpression | null {
+        const value = args.named.get('axis')?.value
+        if (!value) return 'Z'
+        if (value.kind === 'identifier' && ['X', 'Y', 'Z'].includes(value.value)) {
+            return value.value as 'X' | 'Y' | 'Z'
+        }
+        if (value.kind === 'list' && value.items.length === 3
+            && value.items.every((item) => item.kind !== 'namedArgument')) {
+            const values = (value.items as ValueNode[]).map((item) => this.typedScalar(item, formIndex, 'number'))
+            if (values.every((item) => item !== null)) {
+                return {
+                    kind: 'vector3', values: values as Vector3Expression['values'],
+                    sourceId: value.id, span: value.span,
+                }
+            }
+            return null
+        }
+        this.typeError(value, 'axis must be X, Y, Z or a dimensionless direction [x y z].')
+        return null
+    }
+
+    private scalarArgument(
+        args: Arguments, name: string, type: 'number' | 'angle', form: ListNode,
+        formIndex: number, fallback?: number,
+    ): ScalarExpression | null {
+        const value = args.named.get(name)?.value
+        if (value) return this.typedScalar(value, formIndex, type)
+        if (fallback !== undefined) {
+            return { kind: 'scalarLiteral', value: fallback, unit: type === 'angle' ? 'deg' : null, sourceId: form.id, span: form.span }
+        }
+        this.requiredNamed(args, name, form)
+        return null
+    }
+
+    private typedScalar(value: ValueNode, formIndex: number, type: 'number' | 'angle'): ScalarExpression | null {
+        if (value.kind === 'number' || (type === 'angle' && value.kind === 'quantity' && value.unit === 'deg')) {
+            return this.scalarLiteral(value)
+        }
+        if (value.kind === 'identifier') {
+            if (!this.resolveReference(value, formIndex, type === 'angle' ? ['angle', 'number'] : ['number'], type)) return null
+            return { kind: 'parameterReference', name: value.value, sourceId: value.id, span: value.span }
+        }
+        this.typeError(value, type === 'angle' ? 'Expected an angle in deg or an angle parameter.' : 'Expected a dimensionless number or number parameter.')
+        return null
     }
 
     private analyzeProfile(form: ListNode, formIndex: number): ProfileExpression | null {

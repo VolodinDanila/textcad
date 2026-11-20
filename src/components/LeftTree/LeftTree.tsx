@@ -6,6 +6,8 @@ type BodyItem = {
     name: string
     operation: EvaluatedSolidArtifact['operation']
     distance?: number
+    angle?: number
+    count?: number
     inputs: string[]
     published: boolean
 }
@@ -15,6 +17,8 @@ const OPERATION_LABELS = {
     union: 'Объединение',
     cut: 'Вычитание',
     intersect: 'Пересечение',
+    revolve: 'Вращение',
+    'pattern-circular': 'Круговой массив',
 } as const
 
 type LeftTreeProps = {
@@ -188,7 +192,7 @@ function LeftTree({
 
                                     {!collapsedNodes.has(bodyNode) && renderRow({
                                         id: `feature:${body.name}`,
-                                        label: `${OPERATION_LABELS[body.operation]}${body.distance !== undefined ? ` · ${body.distance} мм` : ''}`,
+                                        label: `${OPERATION_LABELS[body.operation]}${body.distance !== undefined ? ` · ${body.distance} мм` : ''}${body.count !== undefined ? ` · ${body.count} шт.` : ''}${body.angle !== undefined ? ` · ${body.angle}°` : ''}`,
                                         depth: 3,
                                         icon: 'feature',
                                     })}

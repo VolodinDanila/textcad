@@ -32,6 +32,8 @@ type ModelInfo = {
         name: string
         operation: EvaluatedSolidArtifact['operation']
         distance?: number
+        angle?: number
+        count?: number
         inputs: string[]
         published: boolean
     }>
@@ -235,10 +237,12 @@ function App() {
                         .map(({ name }) => name),
                     bodies: evaluated.artifacts
                         .filter((artifact) => artifact.kind === 'solid')
-                        .map(({ name, operation, distance, inputs }) => ({
+                        .map(({ name, operation, distance, angle, count, inputs }) => ({
                             name,
                             operation,
                             distance,
+                            angle,
+                            count,
                             inputs,
                             published: evaluated.roots.some((item) => item.name === name),
                         })),
