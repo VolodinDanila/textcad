@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { EvaluatedSolidArtifact } from '../../dsl'
 import { useLocale } from '../../i18n/localeContext'
 import { countNoun } from '../../i18n/messages'
 import CadIcon, { type CadIconName } from './CadIcon'
+import { relatedBodyNames, type ModelTarget } from '../../cad/modelSelection'
 import './LeftTree.css'
 
 type BodyItem = {
@@ -41,6 +42,12 @@ type LeftTreeProps = {
     bodies: BodyItem[]
     isStale: boolean
     width: number
+    selection: ModelTarget | null
+    hovered: ModelTarget | null
+    collapsedNodes: ReadonlySet<string>
+    onToggleNode: (node: string) => void
+    onSelect: (target: ModelTarget | null) => void
+    onHover: (target: ModelTarget | null) => void
     onClose: () => void
 }
 
@@ -50,25 +57,22 @@ function LeftTree({
     bodies,
     isStale,
     width,
+    selection,
+    hovered,
+    collapsedNodes,
+    onToggleNode,
+    onSelect,
+    onHover,
     onClose,
 }: LeftTreeProps) {
     const { locale, t, number } = useLocale()
-    const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set())
-    const [selectedNode, setSelectedNode] = useState('document')
+    const rowRefs = useRef(new Map<string, HTMLDivElement>())
+    const relatedNames = new Set(relatedBodyNames(selection, bodies))
+    const hoveredNames = new Set(relatedBodyNames(hovered, bodies))
 
-    const toggleNode = (node: string) => {
-        setCollapsedNodes((current) => {
-            const next = new Set(current)
-
-            if (next.has(node)) {
-                next.delete(node)
-            } else {
-                next.add(node)
-            }
-
-            return next
-        })
-    }
+    useEffect(() => {
+        if (selection) rowRefs.current.get(selection.nodeId)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }, [selection, collapsedNodes])
 
     const renderRow = ({
         id,
@@ -76,30 +80,44 @@ function LeftTree({
         depth,
         icon,
         expandable,
+        targetId = id,
     }: {
         id: string
         label: string
         depth: number
         icon: CadIconName
         expandable?: string
+        targetId?: string
     }) => {
         const isExpanded = expandable ? !collapsedNodes.has(expandable) : undefined
-        const isSelected = selectedNode === id
+        const isSelected = selection?.nodeId === id
+        const isBody = id.startsWith('body:')
+        const bodyName = id.slice('body:'.length)
+        const isRelated = isBody && !isSelected && relatedNames.has(bodyName)
+        const isHovered = hovered?.nodeId === id || (isBody && hoveredNames.has(bodyName))
 
         return (
             <div
                 key={id}
-                className={`left-tree__row${isSelected ? ' left-tree__row--selected' : ''}`}
+                ref={(element) => { if (element) rowRefs.current.set(id, element); else rowRefs.current.delete(id) }}
+                data-node-id={id}
+                className={`left-tree__row${isSelected ? ' left-tree__row--selected' : ''}${isRelated ? ' left-tree__row--related' : ''}${isHovered ? ' left-tree__row--hovered' : ''}`}
                 style={{ '--tree-depth': depth } as React.CSSProperties}
                 role="treeitem"
                 aria-expanded={expandable ? isExpanded : undefined}
                 aria-selected={isSelected}
                 tabIndex={0}
-                onClick={() => setSelectedNode(id)}
+                onClick={() => onSelect({ nodeId: targetId })}
+                onPointerEnter={() => onHover({ nodeId: targetId })}
+                onPointerLeave={() => onHover(null)}
                 onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
-                        setSelectedNode(id)
+                        onSelect({ nodeId: targetId })
+                    } else if (event.key === 'Escape') {
+                        event.preventDefault()
+                        onSelect(null)
+                        onHover(null)
                     }
                 }}
             >
@@ -111,7 +129,7 @@ function LeftTree({
                         tabIndex={-1}
                         onClick={(event) => {
                             event.stopPropagation()
-                            toggleNode(expandable)
+                            onToggleNode(expandable)
                         }}
                     >
                         {isExpanded ? '▾' : '▸'}
@@ -203,6 +221,7 @@ function LeftTree({
                                     })}
                                     {!collapsedNodes.has(bodyNode) && body.inputs.map((input, index) => renderRow({
                                         id: `input:${body.name}:${index}`,
+                                        targetId: `${sketches.includes(input) ? 'sketch' : 'body'}:${input}`,
                                         label: input,
                                         depth: 4,
                                         icon: 'link',

@@ -6,6 +6,7 @@ import RightPanel, { type PanelTab } from './components/RightPanel/RightPanel'
 import Viewport, { type ViewportStatus } from './components/Viewport/Viewport'
 import { initCad } from './cad/initCad'
 import { meshCadModels } from './cad/meshCadModel'
+import { revealTarget, sameTarget, type ModelTarget } from './cad/modelSelection'
 import {
     analyzeTextCad,
     evaluateTextCad,
@@ -130,6 +131,24 @@ function disposeSolids(result: EvaluationResult) {
 function App() {
     const { locale, t } = useLocale()
     const [mesh, setMesh] = useState<MeshData | null>(null)
+    const [selection, setSelection] = useState<ModelTarget | null>(null)
+    const [hovered, setHovered] = useState<ModelTarget | null>(null)
+    const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set())
+    const handleSelect = useCallback((target: ModelTarget | null) => {
+        setSelection((current) => sameTarget(current, target) ? current : target)
+        if (target) setCollapsedNodes((current) => revealTarget(current, target))
+    }, [])
+    const handleHover = useCallback((target: ModelTarget | null) => {
+        setHovered((current) => sameTarget(current, target) ? current : target)
+    }, [])
+    const handleToggleNode = useCallback((nodeId: string) => {
+        setCollapsedNodes((current) => {
+            const next = new Set(current)
+            if (next.has(nodeId)) next.delete(nodeId)
+            else next.add(nodeId)
+            return next
+        })
+    }, [])
     const [documentSession, setDocumentSession] = useState<DocumentSession>(loadDocumentSession)
     const sessionRef = useRef(documentSession)
     useLayoutEffect(() => { sessionRef.current = documentSession }, [documentSession])
@@ -269,6 +288,8 @@ function App() {
                 if (!isCurrentRevision()) return
 
                 setMesh(meshData)
+                setSelection(null)
+                setHovered(null)
                 setModelInfo(nextModelInfo)
                 setDiagnostics([])
                 setSourceState('synced')
@@ -312,6 +333,8 @@ function App() {
     ), [isDocumentDirty, t])
 
     const beginDocumentEvaluation = useCallback((message: string) => {
+        setSelection(null)
+        setHovered(null)
         setDiagnostics([])
         setSourceState('building')
         setStatus({ level: 'INFO', text: message })
@@ -506,7 +529,13 @@ function App() {
                         bodies={modelInfo.bodies}
                         isStale={sourceState !== 'synced'}
                         width={leftPanelWidth}
-                        onClose={() => setIsLeftPanelOpen(false)}
+                        selection={selection}
+                        hovered={hovered}
+                        collapsedNodes={collapsedNodes}
+                        onToggleNode={handleToggleNode}
+                        onSelect={handleSelect}
+                        onHover={handleHover}
+                        onClose={() => { setIsLeftPanelOpen(false); setHovered(null) }}
                     />
                 )}
 
@@ -520,7 +549,9 @@ function App() {
                     />
                 )}
 
-                <Viewport mesh={mesh} status={status} theme={theme} />
+                <Viewport mesh={mesh} status={status} theme={theme}
+                    bodies={modelInfo.bodies} selection={selection} hovered={hovered}
+                    onSelect={handleSelect} onHover={handleHover} />
 
                 {isRightPanelOpen && (
                     <PanelResizer

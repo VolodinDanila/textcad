@@ -85,6 +85,24 @@
     border-left-color: #bda1e6;
 }
 
+.left-tree__row--related:not(.left-tree__row--selected) {
+    border-left-color: #77618f;
+    background: rgb(166 129 209 / 8%);
+}
+
+.left-tree__row--hovered:not(.left-tree__row--selected),
+.app-shell[data-theme="light"] .left-tree__row--hovered:not(.left-tree__row--selected) {
+    background: rgb(166 129 209 / 17%);
+    box-shadow: inset 0 0 0 1px rgb(166 129 209 / 28%);
+}
+
+.left-tree__row--selected:hover {
+    background: #352a44;
+}
+.app-shell[data-theme="light"] .left-tree__row--selected:hover {
+    background: #e8ddf3;
+}
+
 .left-tree__chevron,
 .left-tree__chevron-spacer {
     width: 16px;
