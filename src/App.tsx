@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import AppHeader from './components/AppHeader/AppHeader'
 import LeftTree from './components/LeftTree/LeftTree'
 import PanelResizer from './components/PanelResizer/PanelResizer'
-import RightPanel from './components/RightPanel/RightPanel'
+import RightPanel, { type PanelTab } from './components/RightPanel/RightPanel'
 import Viewport, { type ViewportStatus } from './components/Viewport/Viewport'
 import { initCad } from './cad/initCad'
 import { meshCadModels } from './cad/meshCadModel'
@@ -20,6 +20,8 @@ import {
     writeTextCadDocument,
     type TextCadFileHandle,
 } from './files/textCadFile'
+import { documentHistory, type HistoryVersion } from './files/documentHistory'
+import { useDocumentHistory } from './files/useDocumentHistory'
 import starSource from '../docs/dsl/examples/star.textcad?raw'
 import './App.css'
 
@@ -42,6 +44,7 @@ type ModelInfo = {
 type SourceState = 'building' | 'synced' | 'error'
 
 type DocumentSession = {
+    id: string
     name: string
     source: string
     savedSource: string | null
@@ -79,6 +82,7 @@ function loadDocumentSession(): DocumentSession {
                 && (typeof value.savedSource === 'string' || value.savedSource === null)
             ) {
                 return {
+                    id: typeof value.id === 'string' && value.id.length > 0 ? value.id : crypto.randomUUID(),
                     name: value.name,
                     source: value.source,
                     savedSource: value.savedSource,
@@ -86,10 +90,11 @@ function loadDocumentSession(): DocumentSession {
             }
         }
     } catch {
-        localStorage.removeItem(DOCUMENT_DRAFT_KEY)
+        // A blocked or corrupt draft must not prevent opening the editor.
     }
 
     return {
+        id: crypto.randomUUID(),
         name: 'star.textcad',
         source: starSource,
         savedSource: starSource,
@@ -124,6 +129,13 @@ function disposeSolids(result: EvaluationResult) {
 function App() {
     const [mesh, setMesh] = useState<MeshData | null>(null)
     const [documentSession, setDocumentSession] = useState<DocumentSession>(loadDocumentSession)
+    const sessionRef = useRef(documentSession)
+    useLayoutEffect(() => { sessionRef.current = documentSession }, [documentSession])
+    const history = useDocumentHistory(documentSession)
+    const { checkpoint: checkpointHistory, restore: restoreHistory, aiEdit: recordAiEdit } = history
+    const [panelTab, setPanelTab] = useState<PanelTab>('source')
+    const [draftError, setDraftError] = useState('')
+    const transitionRef = useRef(0)
     const [evaluationRequest, setEvaluationRequest] = useState(0)
     const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
     const [sourceState, setSourceState] = useState<SourceState>('building')
@@ -157,7 +169,11 @@ function App() {
     }, [theme])
 
     useEffect(() => {
-        localStorage.setItem(DOCUMENT_DRAFT_KEY, JSON.stringify(documentSession))
+        const persistDraft = async () => {
+            try { localStorage.setItem(DOCUMENT_DRAFT_KEY, JSON.stringify(documentSession)); setDraftError('') }
+            catch { setDraftError('Не удалось сохранить черновик браузера. Сохраните файл вручную.') }
+        }
+        void persistDraft()
     }, [documentSession])
 
     useEffect(() => {
@@ -275,7 +291,8 @@ function App() {
         }
     }, [evaluationRequest, source])
 
-    const handleSourceChange = (nextSource: string) => {
+    const handleSourceChange = (nextSource: string, reason: 'edit' | 'ai' = 'edit') => {
+        if (reason === 'ai') void recordAiEdit({ ...sessionRef.current }, nextSource)
         setDocumentSession((current) => ({ ...current, source: nextSource }))
         setSourceState('building')
         setStatus({
@@ -300,30 +317,44 @@ function App() {
 
     const handleNewDocument = useCallback(() => {
         if (!confirmDiscardChanges()) return
-
+        transitionRef.current += 1
+        void checkpointHistory({ ...sessionRef.current }, 'edit')
         fileHandleRef.current = null
-        setDocumentSession({
+        const next: DocumentSession = {
+            id: crypto.randomUUID(),
             name: 'Без названия',
             source: NEW_DOCUMENT_SOURCE,
             savedSource: null,
-        })
+        }
+        void checkpointHistory(next, 'new')
+        setDocumentSession(next)
+        setPanelTab('source')
         beginDocumentEvaluation('Создание нового документа...')
-    }, [beginDocumentEvaluation, confirmDiscardChanges])
+    }, [beginDocumentEvaluation, confirmDiscardChanges, checkpointHistory])
 
     const handleOpenDocument = useCallback(async () => {
         if (!confirmDiscardChanges()) return
+        const transition = ++transitionRef.current
 
         try {
             const opened = await openTextCadDocument()
-            if (!opened) return
-
+            if (!opened || transition !== transitionRef.current) return
+            void checkpointHistory({ ...sessionRef.current }, 'edit')
+            let id: string = crypto.randomUUID()
+            let historyUnavailable = false
+            try { id = await documentHistory.fileSession(opened.name, opened.source, opened.handle, 'open') }
+            catch { historyUnavailable = true }
+            if (transition !== transitionRef.current) return
             fileHandleRef.current = opened.handle
             setDocumentSession({
+                id,
                 name: opened.name,
                 source: opened.source,
                 savedSource: opened.source,
             })
+            setPanelTab('source')
             beginDocumentEvaluation(`Открытие ${opened.name}...`)
+            if (historyUnavailable) setDraftError('Файл открыт, но локальная история недоступна. Сохраняйте файл вручную.')
         } catch (error) {
             setStatus({
                 level: 'ERROR',
@@ -332,9 +363,10 @@ function App() {
                     : 'Не удалось открыть файл',
             })
         }
-    }, [beginDocumentEvaluation, confirmDiscardChanges])
+    }, [beginDocumentEvaluation, confirmDiscardChanges, checkpointHistory])
 
     const handleSaveDocumentAs = useCallback(async () => {
+        const snapshot = { ...sessionRef.current }
         const sourceToSave = documentSession.source
         const suggestedName = documentSession.name === 'Без названия'
             ? 'model.textcad'
@@ -343,14 +375,20 @@ function App() {
         try {
             const saved = await saveTextCadDocumentAs(suggestedName, sourceToSave)
             if (!saved) return
-
+            await checkpointHistory(snapshot, 'edit')
+            let id: string = crypto.randomUUID()
+            let historyUnavailable = false
+            try { id = await documentHistory.fileSession(saved.name, sourceToSave, saved.handle, 'save', undefined, snapshot.id) }
+            catch { historyUnavailable = true }
+            if (sessionRef.current.id !== snapshot.id) return
             fileHandleRef.current = saved.handle
             setDocumentSession((current) => ({
                 ...current,
+                id,
                 name: saved.name,
                 savedSource: sourceToSave,
             }))
-            setStatus({ level: 'INFO', text: `${saved.name} сохранён` })
+            setStatus({ level: historyUnavailable ? 'WARN' : 'INFO', text: historyUnavailable ? `${saved.name} сохранён; локальная история недоступна` : `${saved.name} сохранён` })
         } catch (error) {
             setStatus({
                 level: 'ERROR',
@@ -359,7 +397,7 @@ function App() {
                     : 'Не удалось сохранить файл',
             })
         }
-    }, [documentSession.name, documentSession.source])
+    }, [documentSession.name, documentSession.source, checkpointHistory])
 
     const handleSaveDocument = useCallback(async () => {
         const handle = fileHandleRef.current
@@ -369,14 +407,20 @@ function App() {
         }
 
         const sourceToSave = documentSession.source
+        const snapshot = { ...sessionRef.current }
         try {
             await writeTextCadDocument(handle, sourceToSave)
+            let historyUnavailable = false
+            try { await documentHistory.fileSession(handle.name, sourceToSave, handle, 'save', snapshot.id) }
+            catch { historyUnavailable = true }
+            if (sessionRef.current.id !== snapshot.id) return
             setDocumentSession((current) => ({
                 ...current,
                 name: handle.name,
                 savedSource: sourceToSave,
             }))
-            setStatus({ level: 'INFO', text: `${handle.name} сохранён` })
+            void checkpointHistory({ ...snapshot, name: handle.name }, 'save')
+            setStatus({ level: historyUnavailable ? 'WARN' : 'INFO', text: historyUnavailable ? `${handle.name} сохранён; локальная история недоступна` : `${handle.name} сохранён` })
         } catch (error) {
             setStatus({
                 level: 'ERROR',
@@ -385,7 +429,20 @@ function App() {
                     : 'Не удалось сохранить файл',
             })
         }
-    }, [documentSession.source, handleSaveDocumentAs])
+    }, [documentSession.source, handleSaveDocumentAs, checkpointHistory])
+
+    const handleRestoreVersion = async (version: HistoryVersion) => {
+        const snapshot = { ...sessionRef.current }
+        if (version.documentId !== snapshot.id || version.source === snapshot.source) return false
+        if (!await restoreHistory(snapshot, version)) return false
+        if (sessionRef.current.id !== snapshot.id || sessionRef.current.source !== snapshot.source) {
+            setStatus({ level: 'WARN', text: 'Документ изменился во время восстановления. Выберите версию ещё раз.' })
+            return false
+        }
+        handleSourceChange(version.source)
+        setPanelTab('source')
+        return true
+    }
 
     const validateAiProposal = useCallback(async (candidateSource: string) => {
         const revisionId = 0
@@ -435,6 +492,7 @@ function App() {
                 onOpenDocument={handleOpenDocument}
                 onSaveDocument={handleSaveDocument}
                 onSaveDocumentAs={handleSaveDocumentAs}
+                onOpenHistory={() => { setIsRightPanelOpen(true); setPanelTab('history') }}
             />
 
             <div className="app-workspace">
@@ -473,12 +531,18 @@ function App() {
 
                 {isRightPanelOpen && (
                     <RightPanel
+                        key={documentSession.id}
                         documentName={documentSession.name}
                         source={source}
                         diagnostics={diagnostics}
                         sourceState={sourceState}
                         width={rightPanelWidth}
                         onSourceChange={handleSourceChange}
+                        activeTab={panelTab}
+                        onTabChange={setPanelTab}
+                        history={{ versions: history.versions, loading: history.loading, error: history.error || draftError }}
+                        onCheckpoint={() => checkpointHistory({ ...sessionRef.current }, 'checkpoint')}
+                        onRestoreVersion={handleRestoreVersion}
                         onValidateProposal={validateAiProposal}
                         onClose={() => setIsRightPanelOpen(false)}
                     />

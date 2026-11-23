@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEven
 import { requestAiEdit, type AiChatHistoryItem, type AiEditProposal } from '../../ai/client'
 import { buildLineDiff } from '../../ai/diff'
 import type { Diagnostic } from '../../dsl'
+import type { HistoryVersion } from '../../files/documentHistory'
+import HistoryPanel from './HistoryPanel'
 import './RightPanel.css'
 
-type PanelTab = 'chat' | 'source'
+export type PanelTab = 'chat' | 'source' | 'history'
 
 type RightPanelProps = {
     documentName: string
@@ -12,7 +14,12 @@ type RightPanelProps = {
     diagnostics: Diagnostic[]
     sourceState: 'building' | 'synced' | 'error'
     width: number
-    onSourceChange: (source: string) => void
+    activeTab: PanelTab
+    onTabChange: (tab: PanelTab) => void
+    history: { versions: HistoryVersion[]; loading: boolean; error: string }
+    onCheckpoint: () => Promise<boolean>
+    onRestoreVersion: (version: HistoryVersion) => Promise<boolean>
+    onSourceChange: (source: string, reason?: 'edit' | 'ai') => void
     onValidateProposal: (source: string) => Promise<Diagnostic[]>
     onClose: () => void
 }
@@ -40,8 +47,12 @@ function RightPanel({
     onSourceChange,
     onValidateProposal,
     onClose,
+    activeTab,
+    onTabChange,
+    history,
+    onCheckpoint,
+    onRestoreVersion,
 }: RightPanelProps) {
-    const [activeTab, setActiveTab] = useState<PanelTab>('source')
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [prompt, setPrompt] = useState('')
     const [pendingProposal, setPendingProposal] = useState<PendingProposal | null>(null)
@@ -145,7 +156,7 @@ function RightPanel({
             return
         }
 
-        onSourceChange(pendingProposal.source)
+        onSourceChange(pendingProposal.source, 'ai')
         setPendingProposal(null)
         setChatError('')
         addMessage('assistant', 'Изменения применены к Source. Сохраните файл, когда будете готовы.')
@@ -177,7 +188,7 @@ function RightPanel({
                         type="button"
                         role="tab"
                         aria-selected={activeTab === 'chat'}
-                        onClick={() => setActiveTab('chat')}
+                        onClick={() => onTabChange('chat')}
                     >
                         Chat
                     </button>
@@ -187,9 +198,13 @@ function RightPanel({
                         type="button"
                         role="tab"
                         aria-selected={activeTab === 'source'}
-                        onClick={() => setActiveTab('source')}
+                        onClick={() => onTabChange('source')}
                     >
                         Source
+                    </button>
+                    <button className="right-panel__tab" type="button" role="tab"
+                        aria-selected={activeTab === 'history'} onClick={() => onTabChange('history')}>
+                        История
                     </button>
                 </div>
 
@@ -204,7 +219,10 @@ function RightPanel({
                 </button>
             </div>
 
-            {activeTab === 'source' ? (
+            {activeTab === 'history' ? (
+                <HistoryPanel source={source} versions={history.versions} loading={history.loading}
+                    error={history.error} onCheckpoint={onCheckpoint} onRestore={onRestoreVersion} />
+            ) : activeTab === 'source' ? (
                 <div
                     className="right-panel__content right-panel__content--source"
                     role="tabpanel"

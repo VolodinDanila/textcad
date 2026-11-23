@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { createAdaptiveGrid } from './adaptiveGrid.ts'
+import { formatGridSpacing } from './gridScale.ts'
 import './Viewport.css'
 
 type MeshData = {
@@ -33,6 +35,8 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
     const modelRef = useRef<THREE.Mesh | null>(null)
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
     const controlsRef = useRef<OrbitControls | null>(null)
+    const modelRadiusRef = useRef(40)
+    const [gridStep, setGridStep] = useState<number | null>(null)
     const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null)
 
     const bodyCount = mesh?.bodyCount ?? 0
@@ -53,14 +57,14 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
         const palette = isLightTheme
             ? {
                 background: 0xf2f4f7,
-                grid: 0x8993a1,
+                grid: 0x7b8797,
                 xAxis: 0xc76974,
                 yAxis: 0x4f9870,
                 zAxis: 0x5f78bd,
             }
             : {
                 background: 0x202020,
-                grid: 0x6b6b6b,
+                grid: 0x8b95a5,
                 xAxis: 0xf24040,
                 yAxis: 0x40d959,
                 zAxis: 0x4488ff,
@@ -94,159 +98,8 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
 
         container.appendChild(renderer.domElement)
 
-        const gridMaterial = new THREE.ShaderMaterial({
-            transparent: true,
-            depthWrite: false,
-            depthTest: true,
-            side: THREE.DoubleSide,
-
-            uniforms: {
-                uCenter: {
-                    value: new THREE.Vector2(0, 0),
-                },
-                uFogRadius: {
-                    value: 130.0,
-                },
-                uGridColor: {
-                    value: new THREE.Color(palette.grid),
-                },
-                uXAxisColor: {
-                    value: new THREE.Color(palette.xAxis),
-                },
-                uYAxisColor: {
-                    value: new THREE.Color(palette.yAxis),
-                },
-            },
-
-            vertexShader: `
-        varying vec2 vWorldXY;
-
-        void main() {
-            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-
-            vWorldXY = worldPosition.xy;
-
-            gl_Position =
-                projectionMatrix * viewMatrix * worldPosition;
-        }
-    `,
-
-            fragmentShader: `
-        varying vec2 vWorldXY;
-
-        uniform vec2 uCenter;
-        uniform float uFogRadius;
-        uniform vec3 uGridColor;
-        uniform vec3 uXAxisColor;
-        uniform vec3 uYAxisColor;
-
-        float gridLine(float spacing) {
-            vec2 coord = vWorldXY / spacing;
-
-            vec2 derivative = max(
-                fwidth(coord),
-                vec2(0.0001)
-            );
-
-            vec2 line = abs(
-                fract(coord - 0.5) - 0.5
-            ) / derivative;
-
-            return 1.0 - min(min(line.x, line.y), 1.0);
-        }
-
-        void main() {
-            float fine = gridLine(1.0);
-            float coarse = gridLine(10.0);
-
-            float pixelSize = max(
-                fwidth(vWorldXY.x),
-                fwidth(vWorldXY.y)
-            );
-
-            float fineVisibility =
-                1.0 - smoothstep(0.25, 1.0, pixelSize);
-
-            fine *= fineVisibility;
-
-            float xAxis = 1.0 - smoothstep(
-                0.0,
-                1.5 * max(fwidth(vWorldXY.y), 0.0001),
-                abs(vWorldXY.y)
-            );
-
-            float yAxis = 1.0 - smoothstep(
-                0.0,
-                1.5 * max(fwidth(vWorldXY.x), 0.0001),
-                abs(vWorldXY.x)
-            );
-
-            vec3 color = uGridColor;
-
-            float alpha = max(
-                fine * 0.25,
-                coarse * 0.5
-            );
-
-            color = mix(
-                color,
-                uXAxisColor,
-                xAxis
-            );
-
-            color = mix(
-                color,
-                uYAxisColor,
-                yAxis
-            );
-
-            alpha = max(alpha, xAxis * 0.9);
-            alpha = max(alpha, yAxis * 0.9);
-
-            float distanceToCenter =
-                length(vWorldXY - uCenter);
-
-            float fade = 1.0 - smoothstep(
-                uFogRadius * 0.25,
-                uFogRadius,
-                distanceToCenter
-            );
-
-            gl_FragColor = vec4(color, alpha * fade);
-        }
-    `,
-        });
-
-        const grid = new THREE.Mesh(
-            new THREE.PlaneGeometry(10000, 10000),
-            gridMaterial,
-        );
-
-        grid.position.z = -0.01;
-        scene.add(grid);
-
-        const zAxisGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0, -10000),
-            new THREE.Vector3(0, 0, 10000),
-        ]);
-
-        const zAxisMaterial = new THREE.LineBasicMaterial({
-            color: palette.zAxis,
-            transparent: true,
-            opacity: 1,
-            depthTest: true,
-            depthWrite: false,
-        });
-
-        const zAxis = new THREE.Line(
-            zAxisGeometry,
-            zAxisMaterial,
-        );
-
-        zAxis.frustumCulled = false;
-        zAxis.renderOrder = 2;
-
-        scene.add(zAxis);
+        const grid = createAdaptiveGrid(palette)
+        scene.add(grid.group)
 
         const ambientLight = new THREE.AmbientLight(
             0xffffff,
@@ -305,29 +158,14 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
 
         let animationFrameId = 0
 
-        const animate = () => {
+        let displayedGridStep = 0
+        const animate = (time = performance.now()) => {
             controls.update()
-
-            const distance = controls.getDistance()
-            const fogRadius = THREE.MathUtils.clamp(distance, 40, 350)
-            gridMaterial.uniforms.uFogRadius.value = THREE.MathUtils.lerp(
-                gridMaterial.uniforms.uFogRadius.value,
-                fogRadius,
-                0.12,
-            )
-
-            // The Z axis has its own simple distance-based fade.
-            zAxisMaterial.opacity = 1 - THREE.MathUtils.smoothstep(
-                distance, 500, 1200,
-            )
-
-            grid.position.x = controls.target.x
-            grid.position.y = controls.target.y
-
-            gridMaterial.uniforms.uCenter.value.set(
-                controls.target.x,
-                controls.target.y,
-            )
+            const step = grid.update(camera, controls.target, container.clientHeight, modelRadiusRef.current, time)
+            if (step !== displayedGridStep) {
+                displayedGridStep = step
+                setGridStep(step)
+            }
 
             renderer.render(scene, camera)
 
@@ -358,11 +196,7 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
 
             controls.dispose()
 
-            grid.geometry.dispose()
-            gridMaterial.dispose()
-
-            zAxisGeometry.dispose()
-            zAxisMaterial.dispose()
+            grid.dispose()
 
             renderer.dispose()
 
@@ -430,6 +264,7 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
         const controls = controlsRef.current
         const sphere = geometry.boundingSphere
         if (camera && controls && sphere && sphere.radius > 0) {
+            modelRadiusRef.current = sphere.radius
             const verticalHalfFov = THREE.MathUtils.degToRad(camera.fov / 2)
             const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * camera.aspect)
             const distance = sphere.radius / Math.sin(Math.min(verticalHalfFov, horizontalHalfFov)) * 1.15
@@ -458,6 +293,12 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
     return (
         <div className="viewport">
             <div ref={containerRef} className="viewport__canvas" />
+            {gridStep !== null && (
+                <div className="viewport__grid-scale" aria-label="Шаг сетки"
+                    title={`Мелкая ячейка: ${formatGridSpacing(gridStep)} мм; крупная: ${formatGridSpacing(gridStep * 5)} мм`}>
+                    Сетка <strong>{formatGridSpacing(gridStep)} мм</strong>
+                </div>
+            )}
 
             <div className="viewport__statusbar">
                 <div className="viewport__model-info">

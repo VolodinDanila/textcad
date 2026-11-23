@@ -7,7 +7,7 @@ type MenuDefinition = {
         id: string
         label: string
         shortcut?: string
-        action?: 'new' | 'open' | 'save' | 'saveAs'
+        action?: 'new' | 'open' | 'save' | 'saveAs' | 'history'
     }>
 }
 
@@ -19,6 +19,7 @@ const menus: MenuDefinition[] = [
             { id: 'open', label: 'Open…', shortcut: 'Ctrl+O', action: 'open' },
             { id: 'save', label: 'Save', shortcut: 'Ctrl+S', action: 'save' },
             { id: 'save-as', label: 'Save As…', shortcut: 'Ctrl+Shift+S', action: 'saveAs' },
+            { id: 'history', label: 'История версий…', action: 'history' },
             { id: 'import', label: 'Import…' },
             { id: 'export', label: 'Export…' },
         ],
@@ -71,6 +72,7 @@ type AppHeaderProps = {
     onOpenDocument: () => void | Promise<void>
     onSaveDocument: () => void | Promise<void>
     onSaveDocumentAs: () => void | Promise<void>
+    onOpenHistory: () => void
 }
 
 function AppHeader({
@@ -86,6 +88,7 @@ function AppHeader({
     onOpenDocument,
     onSaveDocument,
     onSaveDocumentAs,
+    onOpenHistory,
 }: AppHeaderProps) {
     const [openMenu, setOpenMenu] = useState<string | null>(null)
     const headerRef = useRef<HTMLElement>(null)
@@ -94,6 +97,7 @@ function AppHeader({
         open: onOpenDocument,
         save: onSaveDocument,
         saveAs: onSaveDocumentAs,
+        history: onOpenHistory,
     }
 
     useEffect(() => {

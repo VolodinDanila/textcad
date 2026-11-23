@@ -1,6 +1,7 @@
 export type TextCadFileHandle = {
     name: string
     getFile: () => Promise<File>
+    isSameEntry?: (other: TextCadFileHandle) => Promise<boolean>
     createWritable: () => Promise<{
         write: (data: string) => Promise<void>
         close: () => Promise<void>

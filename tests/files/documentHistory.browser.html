@@ -1,0 +1,41 @@
+<!doctype html><meta charset="utf-8"><title>TextCAD history storage check</title>
+<button id="run">Проверить хранилище истории</button><pre id="result">Ожидание</pre>
+<script type="module">
+import { documentHistory, HISTORY_LIMITS } from '/src/files/documentHistory.ts'
+document.querySelector('#run').onclick = async () => {
+  const output = document.querySelector('#result')
+  const checks = []
+  const check = (condition, name) => { if (!condition) throw new Error(name); checks.push('PASS: ' + name); output.textContent = checks.join('\n') }
+  try {
+    const name = 'history-storage-check-' + crypto.randomUUID() + '.textcad'
+    const id = await documentHistory.fileSession(name, 'A', null, 'open')
+    const session = {id, name, source:'B'}
+    const versions = await documentHistory.record(session, 'checkpoint')
+    check(versions.length === 2 && versions[0].source === 'B', 'IndexedDB records exact versions')
+    const reopened = await documentHistory.fileSession(name, 'A', null, 'open')
+    check(reopened === id, 'reopening a saved file keeps its history ID')
+    const otherName = 'copy-' + name
+    const forkId = await documentHistory.fileSession(otherName, 'B', null, 'save', undefined, id)
+    const fork = await documentHistory.record({id:forkId,name:otherName,source:'B'}, 'session')
+    check(forkId !== id && fork.some(v => v.source === 'A') && fork.every(v=>v.documentId === forkId), 'Save As copies history into a separate branch')
+    const ai = await documentHistory.recordAiEdit({...session,source:'A'}, 'C')
+    check(ai[0].source === 'C' && ai[0].reason === 'ai' && ai.some(v=>v.source==='A'), 'AI edit retains its input and result')
+    const target = ai.find(v=>v.source==='B')
+    const restored = await documentHistory.restore({...session,source:'C'}, target)
+    check(restored[0].source === 'B' && restored[0].reason === 'restore' && restored.some(v=>v.source==='C'), 'restoration retains the current variant')
+    let rejected = false
+    try { await documentHistory.restore({...session,id:forkId}, target) } catch { rejected = true }
+    check(rejected, 'cross-document restoration is rejected')
+    rejected = false
+    try { await documentHistory.restore({...session,source:'UNSAVED'}, {...target,source:'x'.repeat(HISTORY_LIMITS.documentBytes+1)}) } catch { rejected = true }
+    const afterFailure = await documentHistory.record(session, 'session')
+    check(rejected && afterFailure.length === restored.length && !afterFailure.some(v=>v.source==='UNSAVED'), 'failed transaction preserves earlier history atomically')
+    rejected = false
+    try { await documentHistory.fileSession(name, 'BAD-CLONE', {name, getFile:async()=>null}, 'save', id) } catch { rejected = true }
+    const afterCloneFailure = await documentHistory.record(session, 'session')
+    check(rejected && afterCloneFailure.length === restored.length && !afterCloneFailure.some(v=>v.source==='BAD-CLONE'), 'unsupported handle does not corrupt existing history')
+    check((await documentHistory.fileSession(name,'A',null,'open')) === id, 'older saved fingerprint remains recognizable')
+    output.textContent = checks.join('\n') + '\nALL 9 CHECKS PASSED'
+  } catch (error) { output.textContent = checks.join('\n') + '\nFAIL: ' + error.stack }
+}
+</script>

@@ -1,5 +1,6 @@
 /* Viewport occupies the space between the application header and status bar. */
 .viewport {
+    position: relative;
     width: 100%;
     flex: 1;
     min-height: 0;
@@ -18,6 +19,39 @@
 
 .viewport__canvas canvas {
     display: block;
+}
+
+.viewport__grid-scale {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    z-index: 1;
+    display: flex;
+    gap: 7px;
+    align-items: baseline;
+    padding: 5px 9px;
+    border: 1px solid rgb(154 167 186 / 16%);
+    border-radius: 5px;
+    background: rgb(27 30 35 / 82%);
+    color: #9ba6b6;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+.viewport__grid-scale strong {
+    color: #d0d7e1;
+    font-weight: 500;
+}
+
+.app-shell[data-theme="light"] .viewport__grid-scale {
+    border-color: rgb(108 124 146 / 18%);
+    background: rgb(247 249 252 / 88%);
+    color: #788394;
+}
+
+.app-shell[data-theme="light"] .viewport__grid-scale strong {
+    color: #4e5c70;
 }
 
 .viewport__statusbar {
