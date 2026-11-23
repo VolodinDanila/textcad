@@ -19,6 +19,17 @@ const OPERATION_LABELS = {
     intersect: 'Пересечение',
     revolve: 'Вращение',
     'pattern-circular': 'Круговой массив',
+    'pattern-linear': 'Линейный массив',
+    loft: 'По сечениям',
+    fillet: 'Скругление',
+    chamfer: 'Фаска',
+    shell: 'Оболочка',
+    translate: 'Перемещение',
+    rotate: 'Поворот',
+    mirror: 'Зеркальное отражение',
+    scale: 'Масштабирование',
+    hole: 'Отверстие',
+    thread: 'Резьба',
 } as const
 
 type LeftTreeProps = {

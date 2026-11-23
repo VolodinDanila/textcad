@@ -17,7 +17,7 @@ import {
     type SourceSpan,
 } from './diagnostics.ts'
 
-export type SemanticType = 'number' | 'length' | 'angle' | 'sketch' | 'solid' | 'unknown'
+export type SemanticType = 'number' | 'length' | 'angle' | 'sketch' | 'solid' | 'point2' | 'point3' | 'plane' | 'edges' | 'faces' | 'vertices' | 'unknown'
 
 export type SemanticHeader = {
     version: 1
@@ -51,11 +51,25 @@ export type Point2Expression = {
     span: SourceSpan
 }
 
-export type Point3Expression = {
+export type Point3Coordinates = {
     kind: 'point3'
     values: [LengthExpression, LengthExpression, LengthExpression]
     sourceId: NodeId
     span: SourceSpan
+}
+
+export type Point3Expression = Point3Coordinates | { kind: 'vertexPoint'; selection: SelectionExpression; sourceId: NodeId; span: SourceSpan }
+type Located = { sourceId: NodeId; span: SourceSpan }
+export type BasePlane = 'XY' | 'XZ' | 'YZ'
+export type PlaneExpression = Located & {
+    kind: 'plane'; base: BasePlane; origin?: Point3Expression; normal?: AxisExpression
+    xDirection?: AxisExpression; face?: SelectionExpression; offset: LengthExpression
+}
+export type PlaneOperand = BasePlane | PlaneExpression
+export type SelectionExpression = Located & {
+    kind: 'edges' | 'faces' | 'vertices'; body: string; geometry?: string
+    axis?: AxisExpression; extreme?: 'min' | 'max'; near?: Point3Expression
+    within?: LengthExpression; length?: LengthExpression
 }
 
 export type LineExpression = {
@@ -83,7 +97,11 @@ export type CircleExpression = {
     span: SourceSpan
 }
 
-export type CurveExpression = LineExpression | ArcExpression | CircleExpression
+export type EllipseExpression = Located & { kind: 'ellipse'; center: Point2Expression; radiusX: LengthExpression; radiusY: LengthExpression; angle: ScalarExpression }
+export type PolylineExpression = Located & { kind: 'polyline' | 'polygon'; points: Point2Expression[]; closed: boolean }
+export type RectangleExpression = Located & { kind: 'rectangle'; origin: Point2Expression; width: LengthExpression; height: LengthExpression }
+
+export type CurveExpression = LineExpression | ArcExpression | CircleExpression | EllipseExpression | PolylineExpression | RectangleExpression
 
 export type ProfileExpression = {
     kind: 'profile'
@@ -95,7 +113,7 @@ export type ProfileExpression = {
 
 export type SketchExpression = {
     kind: 'sketch'
-    plane: 'XY' | 'XZ' | 'YZ'
+    plane: PlaneOperand
     origin?: Point3Expression
     profiles: ProfileExpression[]
     sourceId: NodeId
@@ -156,9 +174,33 @@ export type BooleanExpression = {
     span: SourceSpan
 }
 
-export type SolidExpression = ExtrudeExpression | RevolveExpression | CircularPatternExpression | BooleanExpression
+export type LoftExpression = Located & { kind: 'loft'; profiles: string[]; ruled: boolean }
+export type TransformExpression = Located & (
+    { kind: 'translate'; operand: SolidOperand; vector: Point3Expression }
+    | { kind: 'rotate'; operand: SolidOperand; axis: AxisExpression; origin?: Point3Expression; angle: ScalarExpression }
+    | { kind: 'scale'; operand: SolidOperand; factor: ScalarExpression; origin?: Point3Expression }
+    | { kind: 'mirror'; operand: SolidOperand; plane: PlaneOperand; origin?: Point3Expression }
+)
+export type LinearPatternExpression = Located & { kind: 'pattern-linear'; operand: SolidOperand; axis: AxisExpression; count: ScalarExpression; spacing: LengthExpression }
+export type FinishExpression = Located & { kind: 'fillet' | 'chamfer' | 'shell'; operand: SolidOperand; selection: SelectionExpression; size: LengthExpression }
+export type HoleExpression = Located & {
+    kind: 'hole'; operand: SolidOperand; origin: Point3Expression; axis: AxisExpression
+    radius: LengthExpression; depth?: LengthExpression; through: boolean
+    counterboreRadius?: LengthExpression; counterboreDepth?: LengthExpression
+    countersinkRadius?: LengthExpression; countersinkAngle: ScalarExpression
+}
+export type ThreadExpression = Located & {
+    kind: 'thread'; operand: SolidOperand; origin?: Point3Expression; axis: AxisExpression
+    radius: LengthExpression; pitch: LengthExpression; length: LengthExpression; depth: LengthExpression
+    internal: boolean; leftHanded: boolean
+}
+export type SolidExpression = ExtrudeExpression | RevolveExpression | CircularPatternExpression | BooleanExpression | LoftExpression | TransformExpression | LinearPatternExpression | FinishExpression | HoleExpression | ThreadExpression
 export type SolidOperand = SolidReference | SolidExpression
-export type FeatureExpression = SketchExpression | SolidExpression
+export type ConstructionExpression = Point2Expression | Point3Expression | PlaneExpression | SelectionExpression
+export type FeatureExpression = SketchExpression | SolidExpression | ConstructionExpression
+export function isSolidExpression(expression: FeatureExpression): expression is SolidExpression {
+    return !['sketch', 'point2', 'point3', 'vertexPoint', 'plane', 'edges', 'faces', 'vertices'].includes(expression.kind)
+}
 
 export type SemanticParameter = {
     name: string
@@ -171,7 +213,7 @@ export type SemanticParameter = {
 export type SemanticBinding = {
     name: string
     expression: FeatureExpression
-    valueType: 'sketch' | 'solid'
+    valueType: Exclude<SemanticType, 'number' | 'length' | 'angle' | 'unknown'>
     sourceId: NodeId
     span: SourceSpan
 }
@@ -214,6 +256,9 @@ const TOP_LEVEL_COMMANDS = new Set(['textcad', 'param', 'let', 'root'])
 const EXPRESSION_COMMANDS = new Set([
     'sketch', 'profile', 'line', 'arc', 'circle', 'extrude', 'union', 'cut', 'intersect',
     'revolve', 'pattern-circular',
+    'polyline', 'rectangle', 'polygon', 'ellipse', 'point', 'plane', 'loft',
+    'fillet', 'chamfer', 'shell', 'translate', 'rotate', 'mirror', 'scale',
+    'pattern-linear', 'edges', 'faces', 'vertices', 'hole', 'thread',
 ])
 const KNOWN_COMMANDS = new Set([...TOP_LEVEL_COMMANDS, ...EXPRESSION_COMMANDS])
 
@@ -223,6 +268,7 @@ class SemanticAnalyzer {
     private readonly diagnostics: Diagnostic[] = []
     private readonly symbols = new Map<string, SymbolInfo>()
     private readonly declarationIndexes = new Map<string, number[]>()
+    private readonly constructions = new Map<string, ConstructionExpression>()
     private header: SemanticHeader | null = null
 
     constructor(document: DocumentNode, revisionId: number) {
@@ -406,15 +452,13 @@ class SemanticAnalyzer {
         }
 
         const expression = this.analyzeFeatureExpression(expressionNode, formIndex)
-        const valueType = expression?.kind === 'sketch'
-            ? 'sketch'
-            : expression
-                ? 'solid'
-                : 'unknown'
+        const valueType = expression ? isSolidExpression(expression) ? 'solid'
+            : expression.kind === 'vertexPoint' ? 'point3' : expression.kind : 'unknown'
 
         if (!this.declareSymbol(name, valueType, formIndex) || !expression || valueType === 'unknown') {
             return null
         }
+        if (!isSolidExpression(expression) && expression.kind !== 'sketch') this.constructions.set(name.value, expression)
 
         return {
             name: name.value,
@@ -463,6 +507,15 @@ class SemanticAnalyzer {
         }
 
         switch (command.value) {
+            case 'point': return this.analyzePoint(form, formIndex)
+            case 'plane': return this.analyzePlane(form, formIndex)
+            case 'edges': case 'faces': case 'vertices': return this.analyzeSelection(form, formIndex, command.value)
+            case 'loft': return this.analyzeLoft(form, formIndex)
+            case 'translate': case 'rotate': case 'mirror': case 'scale': return this.analyzeTransform(form, formIndex, command.value)
+            case 'pattern-linear': return this.analyzeLinearPattern(form, formIndex)
+            case 'fillet': case 'chamfer': case 'shell': return this.analyzeFinish(form, formIndex, command.value)
+            case 'hole': return this.analyzeHole(form, formIndex)
+            case 'thread': return this.analyzeThread(form, formIndex)
             case 'sketch':
                 return this.analyzeSketch(form, formIndex)
             case 'extrude':
@@ -494,15 +547,7 @@ class SemanticAnalyzer {
         const planeValue = this.requiredNamed(args, 'plane', form)
         const originValue = args.named.get('origin')?.value
         const origin = originValue ? this.point3(originValue, formIndex) : undefined
-        let plane: SketchExpression['plane'] | null = null
-
-        if (planeValue) {
-            if (planeValue.kind === 'identifier' && ['XY', 'XZ', 'YZ'].includes(planeValue.value)) {
-                plane = planeValue.value as SketchExpression['plane']
-            } else {
-                this.typeError(planeValue, 'sketch plane must be XY, XZ or YZ.')
-            }
-        }
+        const plane = planeValue ? this.planeOperand(planeValue, formIndex) : null
 
         const profiles: ProfileExpression[] = []
         for (const child of args.positional) {
@@ -572,10 +617,10 @@ class SemanticAnalyzer {
         }
         if (value.kind === 'list') {
             const expression = this.analyzeFeatureExpression(value, formIndex)
-            if (expression?.kind === 'sketch') {
-                this.typeError(value, `${context} expects a solid, not a sketch.`)
-            } else if (expression) {
+            if (expression && isSolidExpression(expression)) {
                 return expression
+            } else if (expression) {
+                this.typeError(value, `${context} expects a solid.`)
             }
             return null
         }
@@ -615,8 +660,8 @@ class SemanticAnalyzer {
             : null
     }
 
-    private axisArgument(args: Arguments, formIndex: number): AxisExpression | null {
-        const value = args.named.get('axis')?.value
+    private axisArgument(args: Arguments, formIndex: number, name = 'axis'): AxisExpression | null {
+        const value = args.named.get(name)?.value
         if (!value) return 'Z'
         if (value.kind === 'identifier' && ['X', 'Y', 'Z'].includes(value.value)) {
             return value.value as 'X' | 'Y' | 'Z'
@@ -637,19 +682,20 @@ class SemanticAnalyzer {
     }
 
     private scalarArgument(
-        args: Arguments, name: string, type: 'number' | 'angle', form: ListNode,
+        args: Arguments, name: string, type: 'number' | 'angle' | 'length', form: ListNode,
         formIndex: number, fallback?: number,
     ): ScalarExpression | null {
         const value = args.named.get(name)?.value
         if (value) return this.typedScalar(value, formIndex, type)
         if (fallback !== undefined) {
-            return { kind: 'scalarLiteral', value: fallback, unit: type === 'angle' ? 'deg' : null, sourceId: form.id, span: form.span }
+            return { kind: 'scalarLiteral', value: fallback, unit: type === 'angle' ? 'deg' : type === 'length' ? 'mm' : null, sourceId: form.id, span: form.span }
         }
         this.requiredNamed(args, name, form)
         return null
     }
 
-    private typedScalar(value: ValueNode, formIndex: number, type: 'number' | 'angle'): ScalarExpression | null {
+    private typedScalar(value: ValueNode, formIndex: number, type: 'number' | 'angle' | 'length'): ScalarExpression | null {
+        if (type === 'length') return this.lengthExpression(value, formIndex)
         if (value.kind === 'number' || (type === 'angle' && value.kind === 'quantity' && value.unit === 'deg')) {
             return this.scalarLiteral(value)
         }
@@ -703,6 +749,9 @@ class SemanticAnalyzer {
         }
 
         switch (command.value) {
+            case 'polyline': case 'polygon': return this.analyzePolyline(form, formIndex, command.value)
+            case 'rectangle': return this.analyzeRectangle(form, formIndex)
+            case 'ellipse': return this.analyzeEllipse(form, formIndex)
             case 'line':
                 return this.analyzeLine(form, formIndex)
             case 'arc':
@@ -802,7 +851,248 @@ class SemanticAnalyzer {
             : null
     }
 
+    private booleanArgument(args: Arguments, name: string, fallback = false): boolean {
+        const value = args.named.get(name)?.value
+        if (!value) return fallback
+        if (value.kind === 'boolean') return value.value
+        this.typeError(value, `${name} must be true or false.`)
+        return fallback
+    }
+
+    private optionalPoint(args: Arguments, name: string, index: number): Point3Expression | undefined {
+        const value = args.named.get(name)?.value
+        return value ? this.point3(value, index) ?? undefined : undefined
+    }
+
+    private optionalLength(args: Arguments, name: string, index: number): LengthExpression | undefined {
+        const value = args.named.get(name)?.value
+        return value ? this.lengthExpression(value, index) ?? undefined : undefined
+    }
+
+    private analyzePoint(form: ListNode, index: number): Point2Expression | Point3Expression | null {
+        const args = this.collectArguments(form, [])
+        if (!this.expectPositionalCount(args, form, 'point', 1)) return null
+        const value = args.positional[0]
+        if (value.kind === 'list' && value.items.length === 2
+            && !(value.items[0]?.kind === 'identifier' && ['point', 'vertices'].includes(value.items[0].value))) return this.point2(value, index)
+        if (value.kind === 'identifier' && this.symbols.get(value.value)?.type === 'point2') return this.point2(value, index)
+        if (value.kind === 'list' && this.commandName(value)?.value === 'point') return this.analyzePoint(value, index)
+        return this.point3(value, index)
+    }
+
+    private planeOperand(value: ValueNode, index: number): PlaneOperand | null {
+        if (value.kind === 'identifier') {
+            if (['XY', 'XZ', 'YZ'].includes(value.value)) return value.value as BasePlane
+            if (!this.resolveReference(value, index, ['plane'], 'plane')) return null
+            const plane = this.constructions.get(value.value)
+            return plane?.kind === 'plane' ? { ...plane, sourceId: value.id, span: value.span } : null
+        }
+        if (value.kind === 'list' && this.commandName(value)?.value === 'plane') return this.analyzePlane(value, index)
+        this.typeError(value, 'Expected XY, XZ, YZ, a plane reference or a plane expression.')
+        return null
+    }
+
+    private analyzePlane(form: ListNode, index: number): PlaneExpression | null {
+        const args = this.collectArguments(form, ['base', 'origin', 'normal', 'x-direction', 'face', 'offset'])
+        this.rejectPositionalArguments(args, form, 'plane')
+        const baseValue = args.named.get('base')?.value
+        let base: BasePlane = 'XY'
+        if (baseValue) {
+            if (baseValue.kind === 'identifier' && ['XY', 'XZ', 'YZ'].includes(baseValue.value)) base = baseValue.value as BasePlane
+            else this.typeError(baseValue, 'plane base must be XY, XZ or YZ.')
+        }
+        const faceValue = args.named.get('face')?.value
+        const face = faceValue ? this.selectionOperand(faceValue, index, 'faces') : undefined
+        if (faceValue && (baseValue || args.named.has('normal'))) this.typeError(faceValue, 'face cannot be combined with base or normal.')
+        const normal = args.named.has('normal') ? this.axisArgument(args, index, 'normal') : undefined
+        const xDirection = args.named.has('x-direction') ? this.axisArgument(args, index, 'x-direction') : undefined
+        const offset = this.scalarArgument(args, 'offset', 'length', form, index, 0)
+        return offset ? { kind: 'plane', base, origin: this.optionalPoint(args, 'origin', index), normal: normal ?? undefined,
+            xDirection: xDirection ?? undefined, face: face ?? undefined, offset, sourceId: form.id, span: form.span } : null
+    }
+
+    private selectionOperand(value: ValueNode, index: number, kind: SelectionExpression['kind']): SelectionExpression | null {
+        if (value.kind === 'identifier') {
+            if (!this.resolveReference(value, index, [kind], kind)) return null
+            const selection = this.constructions.get(value.value)
+            return selection?.kind === kind ? { ...selection, sourceId: value.id, span: value.span } : null
+        }
+        if (value.kind === 'list' && this.commandName(value)?.value === kind) return this.analyzeSelection(value, index, kind)
+        this.typeError(value, `Expected a ${kind} selection or reference.`)
+        return null
+    }
+
+    private analyzeSelection(form: ListNode, index: number, kind: SelectionExpression['kind']): SelectionExpression | null {
+        const args = this.collectArguments(form, ['type', 'axis', 'extreme', 'near', 'within', 'length'])
+        if (!this.expectPositionalCount(args, form, kind, 1)) return null
+        const body = this.expectIdentifier(args.positional[0], `${kind} expects a solid reference.`)
+        if (!body || !this.resolveReference(body, index, ['solid'], kind)) return null
+        const type = args.named.get('type')?.value
+        const allowed = kind === 'edges' ? ['line', 'circle', 'ellipse', 'bspline', 'bezier', 'hyperbola', 'parabola', 'other']
+            : kind === 'faces' ? ['plane', 'cylinder', 'cone', 'sphere', 'torus', 'bspline', 'bezier', 'revolution', 'extrusion', 'other'] : []
+        let geometry: string | undefined
+        if (type) {
+            if (type.kind === 'identifier' && allowed.includes(type.value)) geometry = type.value
+            else this.typeError(type, `${kind} type must be one of: ${allowed.join(', ') || '(none)'}.`)
+        }
+        const extremeValue = args.named.get('extreme')?.value
+        let extreme: 'min' | 'max' | undefined
+        if (extremeValue) {
+            if (extremeValue.kind === 'identifier' && ['min', 'max'].includes(extremeValue.value)) extreme = extremeValue.value as 'min' | 'max'
+            else this.typeError(extremeValue, 'extreme must be min or max.')
+            if (!args.named.has('axis')) this.requiredNamed(args, 'axis', form)
+        }
+        if (args.named.has('near') !== args.named.has('within')) this.report('TCD-S004', 'near and within must be specified together.', form.span)
+        if (kind !== 'edges' && args.named.has('length')) this.typeError(args.named.get('length')!.value, 'length is only supported by edges.')
+        if (kind === 'vertices' && args.named.has('axis') && !extreme) this.typeError(args.named.get('axis')!.value, 'vertices axis requires extreme.')
+        return { kind, body: body.value, geometry, extreme,
+            axis: args.named.has('axis') ? this.axisArgument(args, index) ?? undefined : undefined,
+            near: this.optionalPoint(args, 'near', index), within: this.optionalLength(args, 'within', index),
+            length: this.optionalLength(args, 'length', index), sourceId: form.id, span: form.span }
+    }
+
+    private analyzePolyline(form: ListNode, index: number, kind: 'polyline' | 'polygon'): PolylineExpression | null {
+        const args = this.collectArguments(form, kind === 'polyline' ? ['closed'] : [])
+        const minimum = kind === 'polygon' ? 3 : 2
+        if (args.positional.length < minimum || args.positional.length > 512) {
+            this.report('TCD-S006', `${kind} expects ${minimum} to 512 points as positional arguments.`, form.span)
+            return null
+        }
+        const points = args.positional.map((value) => this.point2(value, index))
+        return points.every((point) => point !== null) ? { kind, points, closed: kind === 'polygon' || this.booleanArgument(args, 'closed'), sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeRectangle(form: ListNode, index: number): RectangleExpression | null {
+        const args = this.collectArguments(form, ['origin', 'width', 'height'])
+        this.rejectPositionalArguments(args, form, 'rectangle')
+        const originValue = this.requiredNamed(args, 'origin', form)
+        const origin = originValue ? this.point2(originValue, index) : null
+        const width = this.scalarArgument(args, 'width', 'length', form, index)
+        const height = this.scalarArgument(args, 'height', 'length', form, index)
+        return origin && width && height ? { kind: 'rectangle', origin, width, height, sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeEllipse(form: ListNode, index: number): EllipseExpression | null {
+        const args = this.collectArguments(form, ['center', 'radius-x', 'radius-y', 'angle'])
+        this.rejectPositionalArguments(args, form, 'ellipse')
+        const centerValue = this.requiredNamed(args, 'center', form)
+        const center = centerValue ? this.point2(centerValue, index) : null
+        const radiusX = this.scalarArgument(args, 'radius-x', 'length', form, index)
+        const radiusY = this.scalarArgument(args, 'radius-y', 'length', form, index)
+        const angle = this.scalarArgument(args, 'angle', 'angle', form, index, 0)
+        return center && radiusX && radiusY && angle ? { kind: 'ellipse', center, radiusX, radiusY, angle, sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeLoft(form: ListNode, index: number): LoftExpression | null {
+        const args = this.collectArguments(form, ['ruled'])
+        if (args.positional.length < 2 || args.positional.length > 32) {
+            this.report('TCD-S006', 'loft expects 2 to 32 sketch references in section order.', form.span)
+            return null
+        }
+        const profiles: string[] = []
+        for (const value of args.positional) {
+            const ref = this.expectIdentifier(value, 'loft expects sketch references.')
+            if (ref && this.resolveReference(ref, index, ['sketch'], 'loft')) profiles.push(ref.value)
+        }
+        return profiles.length === args.positional.length ? { kind: 'loft', profiles, ruled: this.booleanArgument(args, 'ruled'), sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeTransform(form: ListNode, index: number, kind: TransformExpression['kind']): TransformExpression | null {
+        const names = kind === 'translate' ? ['vector'] : kind === 'rotate' ? ['axis', 'origin', 'angle'] : kind === 'scale' ? ['factor', 'origin'] : ['plane', 'origin']
+        const args = this.collectArguments(form, names)
+        if (!this.expectPositionalCount(args, form, kind, 1)) return null
+        const operand = this.solidOperand(args.positional[0], index, kind)
+        if (!operand) return null
+        const location = { operand, sourceId: form.id, span: form.span }
+        if (kind === 'translate') {
+            const value = this.requiredNamed(args, 'vector', form)
+            const vector = value ? this.point3(value, index) : null
+            return vector ? { kind, vector, ...location } : null
+        }
+        const origin = this.optionalPoint(args, 'origin', index)
+        if (kind === 'rotate') {
+            const axis = this.axisArgument(args, index)
+            const angle = this.scalarArgument(args, 'angle', 'angle', form, index)
+            return axis && angle ? { kind, axis, angle, origin, ...location } : null
+        }
+        if (kind === 'scale') {
+            const factor = this.scalarArgument(args, 'factor', 'number', form, index)
+            return factor ? { kind, factor, origin, ...location } : null
+        }
+        const value = this.requiredNamed(args, 'plane', form)
+        const plane = value ? this.planeOperand(value, index) : null
+        return plane ? { kind, plane, origin, ...location } : null
+    }
+
+    private analyzeLinearPattern(form: ListNode, index: number): LinearPatternExpression | null {
+        const args = this.collectArguments(form, ['axis', 'spacing', 'count'])
+        if (!this.expectPositionalCount(args, form, 'pattern-linear', 1)) return null
+        const operand = this.solidOperand(args.positional[0], index, 'pattern-linear')
+        const axis = this.axisArgument(args, index)
+        const spacing = this.scalarArgument(args, 'spacing', 'length', form, index)
+        const count = this.scalarArgument(args, 'count', 'number', form, index)
+        return operand && axis && spacing && count ? { kind: 'pattern-linear', operand, axis, spacing, count, sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeFinish(form: ListNode, index: number, kind: FinishExpression['kind']): FinishExpression | null {
+        const selector = kind === 'shell' ? 'faces' : 'edges'
+        const sizeName = kind === 'shell' ? 'thickness' : kind === 'fillet' ? 'radius' : 'distance'
+        const args = this.collectArguments(form, [selector, sizeName])
+        if (!this.expectPositionalCount(args, form, kind, 1)) return null
+        const operand = this.solidOperand(args.positional[0], index, kind)
+        const value = this.requiredNamed(args, selector, form)
+        const selection = value ? this.selectionOperand(value, index, selector) : null
+        const size = this.scalarArgument(args, sizeName, 'length', form, index)
+        return operand && selection && size ? { kind, operand, selection, size, sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeHole(form: ListNode, index: number): HoleExpression | null {
+        const args = this.collectArguments(form, ['origin', 'axis', 'radius', 'depth', 'through', 'counterbore-radius', 'counterbore-depth', 'countersink-radius', 'countersink-angle'])
+        if (!this.expectPositionalCount(args, form, 'hole', 1)) return null
+        const operand = this.solidOperand(args.positional[0], index, 'hole')
+        const originValue = this.requiredNamed(args, 'origin', form)
+        const origin = originValue ? this.point3(originValue, index) : null
+        const axis = this.axisArgument(args, index)
+        const radius = this.scalarArgument(args, 'radius', 'length', form, index)
+        const through = this.booleanArgument(args, 'through')
+        if (through && args.named.has('depth')) this.typeError(args.named.get('depth')!.value, 'hole uses either through=true or depth, not both.')
+        if (!through && !args.named.has('depth')) this.requiredNamed(args, 'depth', form)
+        if (args.named.has('counterbore-radius') !== args.named.has('counterbore-depth')) this.report('TCD-S004', 'counterbore-radius and counterbore-depth must be provided together.', form.span)
+        if (args.named.has('counterbore-radius') && args.named.has('countersink-radius')) this.typeError(form, 'Choose a counterbore or countersink, not both.')
+        if (args.named.has('countersink-angle') && !args.named.has('countersink-radius')) this.requiredNamed(args, 'countersink-radius', form)
+        const countersinkAngle = this.scalarArgument(args, 'countersink-angle', 'angle', form, index, 90)
+        return operand && origin && axis && radius && countersinkAngle ? { kind: 'hole', operand, origin, axis, radius, through,
+            depth: this.optionalLength(args, 'depth', index), counterboreRadius: this.optionalLength(args, 'counterbore-radius', index),
+            counterboreDepth: this.optionalLength(args, 'counterbore-depth', index), countersinkRadius: this.optionalLength(args, 'countersink-radius', index),
+            countersinkAngle, sourceId: form.id, span: form.span } : null
+    }
+
+    private analyzeThread(form: ListNode, index: number): ThreadExpression | null {
+        const args = this.collectArguments(form, ['origin', 'axis', 'radius', 'pitch', 'length', 'depth', 'internal', 'left-handed'])
+        if (!this.expectPositionalCount(args, form, 'thread', 1)) return null
+        const operand = this.solidOperand(args.positional[0], index, 'thread')
+        const axis = this.axisArgument(args, index)
+        const radius = this.scalarArgument(args, 'radius', 'length', form, index)
+        const pitch = this.scalarArgument(args, 'pitch', 'length', form, index)
+        const length = this.scalarArgument(args, 'length', 'length', form, index)
+        const depth = this.scalarArgument(args, 'depth', 'length', form, index)
+        return operand && axis && radius && pitch && length && depth ? { kind: 'thread', operand, axis, radius, pitch, length, depth,
+            origin: this.optionalPoint(args, 'origin', index), internal: this.booleanArgument(args, 'internal'),
+            leftHanded: this.booleanArgument(args, 'left-handed'), sourceId: form.id, span: form.span } : null
+    }
+
     private point2(value: ValueNode, formIndex: number): Point2Expression | null {
+        if (value.kind === 'identifier') {
+            if (!this.resolveReference(value, formIndex, ['point2'], 'point')) return null
+            const point = this.constructions.get(value.value)
+            return point?.kind === 'point2' ? { ...point, sourceId: value.id, span: value.span } : null
+        }
+        if (value.kind === 'list' && this.commandName(value)?.value === 'point') {
+            const point = this.analyzePoint(value, formIndex)
+            if (point?.kind === 'point2') return point
+            this.typeError(value, 'Expected a two-dimensional point.')
+            return null
+        }
         if (value.kind !== 'list') {
             this.typeError(value, 'Expected a two-dimensional point.')
             return null
@@ -822,6 +1112,26 @@ class SemanticAnalyzer {
     }
 
     private point3(value: ValueNode, formIndex: number): Point3Expression | null {
+        if (value.kind === 'identifier') {
+            const symbol = this.symbols.get(value.value)
+            if (symbol?.type === 'vertices') {
+                const selection = this.selectionOperand(value, formIndex, 'vertices')
+                return selection ? { kind: 'vertexPoint', selection, sourceId: value.id, span: value.span } : null
+            }
+            if (!this.resolveReference(value, formIndex, ['point3'], 'point')) return null
+            const point = this.constructions.get(value.value)
+            return point?.kind === 'point3' || point?.kind === 'vertexPoint' ? { ...point, sourceId: value.id, span: value.span } : null
+        }
+        if (value.kind === 'list' && this.commandName(value)?.value === 'vertices') {
+            const selection = this.analyzeSelection(value, formIndex, 'vertices')
+            return selection ? { kind: 'vertexPoint', selection, sourceId: value.id, span: value.span } : null
+        }
+        if (value.kind === 'list' && this.commandName(value)?.value === 'point') {
+            const point = this.analyzePoint(value, formIndex)
+            if (point && point.kind !== 'point2') return point
+            this.typeError(value, 'Expected a three-dimensional point.')
+            return null
+        }
         if (value.kind !== 'list' || value.items.length !== 3
             || value.items.some((item) => item.kind === 'namedArgument')) {
             this.typeError(value, 'origin must contain exactly three length values [x y z].')

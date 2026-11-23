@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
     extractGeminiOutputText,
@@ -115,4 +116,11 @@ test('validateAssistantDsl rejects invalid generated TextCAD', () => {
         }),
         /не прошло проверку DSL/,
     )
+})
+
+test('backend accepts the complete expanded DSL showcase and keeps unsupported commands disabled', () => {
+    const source = readFileSync(new URL('../../docs/dsl/examples/feature-showcase.textcad', import.meta.url), 'utf8')
+    const edit = { message: 'Готово', source, changed: true }
+    assert.doesNotThrow(() => validateAssistantDsl(edit))
+    assert.throws(() => validateAssistantDsl({ ...edit, source: source.replace('[loft lower upper ruled=true]', '[sweep lower upper]') }), /не прошло проверку DSL/)
 })

@@ -18,7 +18,7 @@
 
 ```text
 ; Пластина основания
-[let base [box size=[100mm 60mm 8mm]]]
+[let base [extrude baseProfile length=8mm]]
 ```
 
 Комментарии не участвуют в выполнении и должны сохраняться formatter-ом.

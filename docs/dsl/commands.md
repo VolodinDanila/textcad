@@ -1,8 +1,8 @@
 # Команды TextCAD DSL
 
-Команды от `textcad` до `intersect`, описанные ниже, реализованы в Parser,
-Semantic и Evaluator. Заголовок `version=1` сохранён; старые документы совместимы.
-Команды из раздела «Не реализовано» выполнять нельзя.
+Все 35 команд, описанных ниже, реализованы в Semantic и Evaluator.
+Заголовок `version=1` сохранён; старые документы совместимы. Ссылки в примерах
+выражений должны быть объявлены ранее; полные документы находятся в examples/.
 
 ## Заголовок `textcad`
 
@@ -64,7 +64,7 @@ Semantic и Evaluator. Заголовок `version=1` сохранён; стар
 
 ## `sketch`
 
-Создаёт эскиз на базовой плоскости.
+Создаёт эскиз на базовой или именованной рабочей плоскости.
 
 ```text
 [sketch plane=XY
@@ -76,7 +76,7 @@ Semantic и Evaluator. Заголовок `version=1` сохранён; стар
 
 | Аргумент | Тип | Обязателен |
 |---|---|---|
-| `plane` | `XY`, `XZ` или `YZ` | да |
+| `plane` | `XY`, `XZ`, `YZ`, ссылка на plane или выражение plane | да |
 | `origin` | `[Length Length Length]` | нет, `[0mm 0mm 0mm]` |
 | дочерние формы | `profile` | да, одна или больше |
 
@@ -92,7 +92,9 @@ Semantic и Evaluator. Заголовок `version=1` сохранён; стар
 ```
 
 Можно объявлять несколько эскизов с разными плоскостями и началами координат.
-Произвольные повёрнутые плоскости и sketch-on-face пока не реализованы.
+Произвольные плоскости и sketch-on-face создаются через `plane` (см. ниже).
+Без origin используется начало рабочей плоскости; явный origin переопределяет
+его в мировых координатах, сохраняя ориентацию.
 
 ## `profile`
 
@@ -151,7 +153,7 @@ Semantic и Evaluator. Заголовок `version=1` сохранён; стар
 | `center` | Point2 | да |
 | `radius` | Length | да |
 
-Circle должен быть единственной кривой своего profile в v0.
+Circle должен быть единственной кривой своего profile, как и ellipse.
 
 ## `extrude`
 
@@ -261,22 +263,213 @@ Circle должен быть единственной кривой своего 
 Рабочие примеры: [boolean-demo.textcad](examples/boolean-demo.textcad)
 и [multiple-roots.textcad](examples/multiple-roots.textcad).
 
-## Не реализовано
+## Точки и направления
 
-Следующие имена приведены для проектирования примеров, но не являются частью
-исполняемого ядра v0:
+Point2 — два значения длины, Point3 — три значения длины. Вместо вектора
+координат допускается ссылка на point нужной размерности или вложенная команда
+point. Длины принимают mm/параметры длины, углы — deg/параметры угла.
+Безразмерные числа используют единицы заголовка в контексте длины/угла.
+Векторы направлений — три безразмерных числа/параметра; нормализуются и не могут
+быть нулевыми. Axis — X/Y/Z либо такой вектор. Все координаты вне кривых эскиза
+мировые. Арифметики над параметрами нет.
+
+## `point`
 
 ```text
-box cylinder cone sphere torus
-rectangle polygon polyline ellipse point plane
-loft fillet chamfer shell hole thread
-translate rotate scale
-mirror
-pattern-linear
-edges faces generated-by
+[let center [point [5mm 3mm]]]
+[let origin [point [0mm 0mm 12mm]]]
+[let corner [point [vertices body near=[10mm 10mm 10mm] within=0.1mm]]]
 ```
 
-Эти формы нельзя генерировать до их реализации. Объёмные примитивы `box`,
-`cylinder`, `cone`, `sphere`, `torus` исключены из согласованного ядра языка.
-Остальные согласованные команды будут добавляться следующими этапами.
+Один позиционный Point2/Point3 либо селектор ровно одной вершины. Ссылка на
+vertices также принимается как Point3. Точка не создаёт объём и не является root.
+Двумерная точка задаёт локальные координаты в эскизе; трёхмерная — мировые XYZ.
+Двумерные и трёхмерные точки не смешиваются.
+
+## `plane`
+
+```text
+[let work [plane base=XY origin=[0mm 0mm 10mm] offset=2mm]]
+[let inclined [plane origin=[0mm 0mm 0mm] normal=[0 1 1] x-direction=X]]
+[let top [plane face=[faces body type=plane axis=Z extreme=max] offset=1mm]]
+```
+
+Позиционных аргументов нет. base=XY/XZ/YZ (XY по умолчанию), origin — Point3,
+normal и x-direction — Axis, offset — Length (0 по умолчанию).
+normal переопределяет нормаль base. x-direction проецируется в плоскость;
+направление, параллельное нормали, — ошибка. Локальная Y = normal × X.
+Если x-direction не задан для произвольной нормали или грани, используется
+проекция мировой X, а при почти параллельной X нормали — мировой Y.
+
+face — селектор ровно одной плоской грани, использует её наружную нормаль и
+центр. Нельзя сочетать face с base или normal. origin может переопределить
+центр; затем offset смещает начало вдоль нормали. Кривые грани не поддерживаются.
+
+## `polyline`, `polygon`, `rectangle`, `ellipse`
+
+```text
+[polyline [0mm 0mm] [10mm 0mm] [10mm 10mm]]
+[polyline closed=true [0mm 0mm] [10mm 0mm] [10mm 10mm] [0mm 10mm]]
+[polygon [0mm 0mm] [10mm 0mm] [7mm 8mm]]
+[rectangle origin=[-10mm -5mm] width=20mm height=10mm]
+[ellipse center=[0mm 0mm] radius-x=10mm radius-y=6mm angle=30deg]
+```
+
+- polyline: 2–512 позиционных Point2, closed=false. Открытая полилиния может
+  соединяться с другими line/arc/polyline; весь profile должен замкнуться.
+  closed=true добавляет последнюю сторону. Это полилиния; отдельного path нет.
+- polygon: 3–512 Point2, замыкается автоматически. Не обязательно правильный.
+  Повторять первую точку в конце допустимо; соседние одинаковые точки — ошибка.
+- rectangle: обязательные origin (нижний левый угол в локальных координатах),
+  положительные width/height. Обычный прямоугольник без скруглений.
+- ellipse: обязательные center (Point2), положительные полуоси radius-x/radius-y;
+  angle=0deg вращает эллипс вокруг центра. radius-y может быть больше radius-x.
+  Эллипс уже замкнут и является единственной кривой своего profile.
+
+Все четыре формы используются внутри profile, не связываются отдельным let.
+Отдельные замкнутые контуры задавайте отдельными profile.
+
+## `loft`
+
+```text
+[let adapter [loft lower middle upper ruled=false]]
+```
+
+2–32 ссылки на sketch в порядке сечений. ruled=false — сглаженный переход,
+ruled=true — линейчатые поверхности между соседними сечениями. Каждое сечение
+содержит одну связанную внешнюю область. Отверстия поддерживаются, их количество
+должно совпадать. Соответствие отверстий определяется сортировкой центров их
+габаритов в локальных координатах: X, затем Y. Размещайте их в соответствующих
+местах. Вырождения, совпадающие сечения и самопересечения отклоняются CAD-ядром.
+
+## `translate`, `rotate`, `mirror`, `scale`
+
+```text
+[let moved [translate body vector=[10mm 0mm 5mm]]]
+[let turned [rotate body axis=Z origin=[0mm 0mm 0mm] angle=90deg]]
+[let reflected [mirror body plane=YZ]]
+[let enlarged [scale body factor=2 origin=[0mm 0mm 0mm]]]
+```
+
+Один позиционный Solid — ссылка или вложенная операция. Вход сохраняется.
+Все координаты мировые.
+
+- translate: обязательный vector — Point3, смещение в mm.
+- rotate: обязательный angle, axis=Z, origin — мировой ноль. Нулевой угол допустим.
+- mirror: обязательный plane — базовая/рабочая плоскость, origin при наличии
+  переопределяет её начало.
+- scale: обязательный положительный безразмерный factor, origin — мировой ноль.
+  Равномерный масштаб по трём осям; нулевой/отрицательный фактор запрещён.
+
+## `pattern-linear`
+
+```text
+[let row [pattern-linear seed count=4 axis=X spacing=15mm]]
+```
+
+Один позиционный Solid, обязательные count (целое 1–128, включая исходный)
+и ненулевая spacing (Length). axis=Z по умолчанию. Копия i смещается на
+i × spacing × нормализованное направление, начиная с i=0. Отрицательная spacing
+меняет направление. Перекрывающиеся копии объединяются, независимые сохраняются.
+Двумерная решётка создаётся вложенными линейными массивами.
+
+## `edges`, `faces`, `vertices`
+
+```text
+[let vertical [edges body type=line axis=Z length=10mm]]
+[let top [faces body type=plane axis=Z extreme=max]]
+[let rim [edges body type=circle axis=Z extreme=max]]
+[let corner [vertices body near=[10mm 10mm 10mm] within=0.1mm]]
+```
+
+Одна позиционная ссылка на тело. Возвращают селектор, не объём. Допускаются let
+и вложенные селекторы. Без фильтров выбираются все элементы данного вида.
+Пустая выборка — TCD-G004. Фильтры объединяются через AND:
+
+| Фильтр | Смысл |
+| --- | --- |
+| type для edges | line, circle, ellipse, bspline, bezier, hyperbola, parabola, other |
+| type для faces | plane, cylinder, cone, sphere, torus, bspline, bezier, revolution, extrusion, other |
+| axis без extreme | прямые рёбра вдоль направления или плоские грани с параллельной нормалью, оба знака |
+| axis + extreme=min/max | крайние центры габаритов вдоль направления среди остальных кандидатов |
+| near=Point3 within=Length | центр габаритов/вершина в мировой сфере; оба аргумента вместе |
+| length=Length | длина ребра, только для edges |
+
+Для vertices нет type/length; axis допустим только с extreme. within >0.
+extreme использует центры габаритов, а не любую точку ребра/грани.
+Общие вершины считаются один раз. Для Point3 нужна ровно одна вершина;
+для plane — ровно одна плоская грань. Неоднозначная выборка — ошибка.
+
+Номеров рёбер/граней и generated-by нет. Селектор привязан к своему телу.
+После изменения тела выбирайте элементы из нового результата; чужие элементы
+нельзя передавать fillet/chamfer/shell. Геометрические условия пересчитываются
+при каждом построении; постоянные топологические ID не обещаются.
+
+## `fillet`, `chamfer`, `shell`
+
+```text
+[let rounded [fillet body edges=[edges body type=line axis=Z] radius=2mm]]
+[let beveled [chamfer body edges=[edges body type=circle axis=Z extreme=max] distance=0.5mm]]
+[let openBox [shell body faces=[faces body type=plane axis=Z extreme=max] thickness=1mm]]
+```
+
+Один позиционный Solid и обязательный селектор элементов этого тела.
+fillet: edges + положительный radius, постоянный радиус.
+chamfer: edges + положительная distance, симметричная фаска 45°.
+shell: faces + положительная thickness, удаляет выбранные грани и создаёт
+стенки внутрь исходного тела. Неподходящие размеры, углы и самопересечения
+могут быть отклонены CAD-ядром. Входные тела сохраняются.
+
+## `hole`
+
+```text
+[let blind [hole body origin=[5mm 5mm 0mm] axis=Z radius=2mm depth=6mm]]
+[let through [hole body origin=[5mm 5mm 0mm] axis=Z radius=2mm through=true]]
+[let recessed [hole body origin=[5mm 5mm 0mm] axis=Z radius=2mm depth=8mm counterbore-radius=4mm counterbore-depth=2mm]]
+[let sunk [hole body origin=[5mm 5mm 0mm] axis=Z radius=2mm depth=8mm countersink-radius=4mm countersink-angle=90deg]]
+```
+
+Один позиционный Solid. Обязательные origin — вход в мировых координатах,
+radius — положительная длина. axis=Z направлен в материал. Задайте либо
+положительную depth, либо through=true. Сквозной инструмент проходит габариты
+тела в обе стороны вдоль оси. origin определяет линию отверстия и вход расширения.
+
+counterbore-radius/depth задаются вместе: цилиндрическая цековка.
+countersink-radius задаёт коническую зенковку; countersink-angle — полный угол
+конуса, по умолчанию 90deg, строго между 0 и 180deg. Расширяющий радиус больше
+radius, глубина расширения не больше depth глухого отверстия. Цековка и зенковка
+одновременно запрещены. Если операция не удаляет материал, возвращается TCD-G004.
+
+## `thread`
+
+```text
+[let bolt [thread shaft radius=5mm pitch=2mm length=8mm depth=0.6mm axis=Z origin=[0mm 0mm 0mm]]]
+[let nut [thread boredBody radius=3mm pitch=2mm length=8mm depth=0.6mm internal=true left-handed=true]]
+```
+
+Один позиционный Solid. Обязательные положительные radius, pitch, length, depth.
+axis=Z, origin — мировой ноль, internal=false, left-handed=false.
+Реальная однозаходная резьба: вычитание винтовой канавки с усечённым V-профилем 60°.
+Наружная: radius — наружный радиус заготовки, корень radius-depth. Внутренняя:
+radius — радиус уже существующего отверстия, корень radius+depth. Сначала
+создайте отверстие через hole/cut. Ось и размеры должны совпадать с заготовкой.
+origin — начало участка, length откладывается вдоль axis.
+
+Площадка корня имеет ширину pitch/16. Это геометрическая модель, без таблиц
+метрических стандартов, посадок и производственных допусков. Ограничения:
+length/pitch ≤64 витков, depth<radius, depth≤0.7×pitch. В зоне канавки должен
+быть материал. Концы обрезаются по длине участка; автоматического сбега нет.
+Резьба тяжелее простых операций. Публичных helix/sweep в языке нет.
+
+## Полные примеры и границы набора
+
+`feature-showcase.textcad` показывает корпус, loft с отверстием, резьбовой вал
+и эллиптическую пластину. `motor-bracket.textcad` — кронштейн с рёбрами,
+решёткой отверстий и фасками. Остальные примеры описаны выше.
+
+В согласованный набор не входят команды box/cylinder/cone/sphere/torus,
+rounded-rectangle, regular-polygon, ellipse-arc, helix, sweep, split, draft,
+offset-solid, section, отдельная ось, spline/Bezier-кривые эскиза, constraints,
+арифметика, модули и сборки. Не генерируйте их. Объёмные формы строятся из
+эскизов и операций; future-имена не являются рабочим синтаксисом.
 
