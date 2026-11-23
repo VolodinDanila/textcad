@@ -49,8 +49,8 @@
 .panel-resizer:focus-visible .panel-resizer__line,
 .panel-resizer--dragging .panel-resizer__line {
     width: 2px;
-    background: #5d8de8;
-    box-shadow: 0 0 8px rgb(93 141 232 / 45%);
+    background: #bda1e6;
+    box-shadow: 0 0 8px rgb(189 161 230 / 45%);
 }
 
 .panel-resizer:hover .panel-resizer__grip,
@@ -61,7 +61,7 @@
 }
 
 .panel-resizer:focus-visible .panel-resizer__grip {
-    outline: 1px solid #77a7ff;
+    outline: 1px solid #bda1e6;
     outline-offset: 1px;
 }
 

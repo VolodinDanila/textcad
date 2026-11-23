@@ -22,6 +22,7 @@ import {
 } from './files/textCadFile'
 import { documentHistory, type HistoryVersion } from './files/documentHistory'
 import { useDocumentHistory } from './files/useDocumentHistory'
+import { useLocale } from './i18n/localeContext'
 import starSource from '../docs/dsl/examples/star.textcad?raw'
 import './App.css'
 
@@ -127,13 +128,14 @@ function disposeSolids(result: EvaluationResult) {
 }
 
 function App() {
+    const { locale, t } = useLocale()
     const [mesh, setMesh] = useState<MeshData | null>(null)
     const [documentSession, setDocumentSession] = useState<DocumentSession>(loadDocumentSession)
     const sessionRef = useRef(documentSession)
     useLayoutEffect(() => { sessionRef.current = documentSession }, [documentSession])
     const history = useDocumentHistory(documentSession)
     const { checkpoint: checkpointHistory, restore: restoreHistory, aiEdit: recordAiEdit } = history
-    const [panelTab, setPanelTab] = useState<PanelTab>('source')
+    const [panelTab, setPanelTab] = useState<PanelTab>('chat')
     const [draftError, setDraftError] = useState('')
     const transitionRef = useRef(0)
     const [evaluationRequest, setEvaluationRequest] = useState(0)
@@ -142,6 +144,7 @@ function App() {
     const revisionRef = useRef(0)
     const fileHandleRef = useRef<TextCadFileHandle | null>(null)
     const source = documentSession.source
+    const displayName = documentSession.name === 'Без названия' ? t('Без названия') : documentSession.name
     const isDocumentDirty = documentSession.savedSource === null
         || source !== documentSession.savedSource
     const [theme, setTheme] = useState<AppTheme>(() => {
@@ -305,8 +308,8 @@ function App() {
 
     const confirmDiscardChanges = useCallback(() => (
         !isDocumentDirty
-        || window.confirm('Есть несохранённые изменения. Продолжить без сохранения?')
-    ), [isDocumentDirty])
+        || window.confirm(t('Есть несохранённые изменения. Продолжить без сохранения?'))
+    ), [isDocumentDirty, t])
 
     const beginDocumentEvaluation = useCallback((message: string) => {
         setDiagnostics([])
@@ -337,7 +340,7 @@ function App() {
         const transition = ++transitionRef.current
 
         try {
-            const opened = await openTextCadDocument()
+            const opened = await openTextCadDocument(locale)
             if (!opened || transition !== transitionRef.current) return
             void checkpointHistory({ ...sessionRef.current }, 'edit')
             let id: string = crypto.randomUUID()
@@ -363,7 +366,7 @@ function App() {
                     : 'Не удалось открыть файл',
             })
         }
-    }, [beginDocumentEvaluation, confirmDiscardChanges, checkpointHistory])
+    }, [beginDocumentEvaluation, confirmDiscardChanges, checkpointHistory, locale])
 
     const handleSaveDocumentAs = useCallback(async () => {
         const snapshot = { ...sessionRef.current }
@@ -373,7 +376,7 @@ function App() {
             : documentSession.name
 
         try {
-            const saved = await saveTextCadDocumentAs(suggestedName, sourceToSave)
+            const saved = await saveTextCadDocumentAs(suggestedName, sourceToSave, locale)
             if (!saved) return
             await checkpointHistory(snapshot, 'edit')
             let id: string = crypto.randomUUID()
@@ -397,7 +400,7 @@ function App() {
                     : 'Не удалось сохранить файл',
             })
         }
-    }, [documentSession.name, documentSession.source, checkpointHistory])
+    }, [documentSession.name, documentSession.source, checkpointHistory, locale])
 
     const handleSaveDocument = useCallback(async () => {
         const handle = fileHandleRef.current
@@ -478,7 +481,7 @@ function App() {
     return (
         <main className="app-shell" data-theme={theme}>
             <AppHeader
-                documentName={documentSession.name}
+                documentName={displayName}
                 isDocumentDirty={isDocumentDirty}
                 theme={theme}
                 isLeftPanelOpen={isLeftPanelOpen}
@@ -498,7 +501,7 @@ function App() {
             <div className="app-workspace">
                 {isLeftPanelOpen && (
                     <LeftTree
-                        documentName={documentSession.name}
+                        documentName={displayName}
                         sketches={modelInfo.sketches}
                         bodies={modelInfo.bodies}
                         isStale={sourceState !== 'synced'}
@@ -532,7 +535,7 @@ function App() {
                 {isRightPanelOpen && (
                     <RightPanel
                         key={documentSession.id}
-                        documentName={documentSession.name}
+                        documentName={displayName}
                         source={source}
                         diagnostics={diagnostics}
                         sourceState={sourceState}

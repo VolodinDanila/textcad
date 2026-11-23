@@ -3,6 +3,9 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { createAdaptiveGrid } from './adaptiveGrid.ts'
 import { formatGridSpacing } from './gridScale.ts'
+import { useLocale } from '../../i18n/localeContext'
+import { countNoun } from '../../i18n/messages'
+import { localizeStatus } from '../../i18n/diagnostics'
 import './Viewport.css'
 
 type MeshData = {
@@ -30,6 +33,7 @@ type CursorPosition = {
 }
 
 function Viewport({ mesh, status, theme }: ViewportProps) {
+    const { locale, t, number } = useLocale()
     const containerRef = useRef<HTMLDivElement>(null)
     const sceneRef = useRef<THREE.Scene | null>(null)
     const modelRef = useRef<THREE.Mesh | null>(null)
@@ -40,11 +44,7 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
     const [cursorPosition, setCursorPosition] = useState<CursorPosition | null>(null)
 
     const bodyCount = mesh?.bodyCount ?? 0
-    const bodyCountMod100 = bodyCount % 100
-    const bodyLabel = bodyCountMod100 >= 11 && bodyCountMod100 <= 14
-        ? 'тел'
-        : bodyCount % 10 === 1 ? 'тело' : bodyCount % 10 >= 2 && bodyCount % 10 <= 4 ? 'тела' : 'тел'
-    const triangleCount = mesh ? Math.floor(mesh.triangles.length / 3) : 0
+    const statusText = localizeStatus(status.text, locale)
 
     useEffect(() => {
         const container = containerRef.current
@@ -294,9 +294,9 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
         <div className="viewport">
             <div ref={containerRef} className="viewport__canvas" />
             {gridStep !== null && (
-                <div className="viewport__grid-scale" aria-label="Шаг сетки"
-                    title={`Мелкая ячейка: ${formatGridSpacing(gridStep)} мм; крупная: ${formatGridSpacing(gridStep * 5)} мм`}>
-                    Сетка <strong>{formatGridSpacing(gridStep)} мм</strong>
+                <div className="viewport__grid-scale" aria-label={t('Шаг сетки')}
+                    title={t('Мелкая ячейка: {minor} мм; крупная: {major} мм', { minor: formatGridSpacing(gridStep, locale), major: formatGridSpacing(gridStep * 5, locale) })}>
+                    {t('Сетка')} <strong>{formatGridSpacing(gridStep, locale)} {t('мм')}</strong>
                 </div>
             )}
 
@@ -304,32 +304,30 @@ function Viewport({ mesh, status, theme }: ViewportProps) {
                 <div className="viewport__model-info">
                     <span className="viewport__model-icon" aria-hidden="true">▣</span>
                     <span>
-                        {bodyCount} {bodyLabel}
-                        {' · '}
-                        {triangleCount.toLocaleString('ru-RU')} трис
+                        {number(bodyCount)} {countNoun(bodyCount, 'body', locale)}
                     </span>
                 </div>
 
                 <div className="viewport__message" role="status" aria-live="polite">
                     <span className={`viewport__level viewport__level--${status.level.toLowerCase()}`}>
-                        {status.level}
+                        {t(status.level)}
                     </span>
-                    <span className="viewport__message-text" title={status.text}>
-                        {status.text}
+                    <span className="viewport__message-text" title={statusText}>
+                        {statusText}
                     </span>
                 </div>
 
-                <div className="viewport__coordinates" aria-label="Координаты курсора">
+                <div className="viewport__coordinates" aria-label={t('Координаты курсора')}>
                     <span className="viewport__coord-x">
-                        X {cursorPosition?.x.toFixed(1) ?? '—'}
+                        X {cursorPosition ? number(cursorPosition.x, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                     </span>
                     <span className="viewport__coord-y">
-                        Y {cursorPosition?.y.toFixed(1) ?? '—'}
+                        Y {cursorPosition ? number(cursorPosition.y, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                     </span>
                     <span className="viewport__coord-z">
-                        Z {cursorPosition?.z.toFixed(1) ?? '—'}
+                        Z {cursorPosition ? number(cursorPosition.z, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—'}
                     </span>
-                    <span className="viewport__units">мм</span>
+                    <span className="viewport__units">{t('мм')}</span>
                 </div>
             </div>
         </div>

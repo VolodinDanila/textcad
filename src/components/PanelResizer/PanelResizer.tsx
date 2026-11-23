@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocale } from '../../i18n/localeContext'
 import './PanelResizer.css'
 
 type PanelResizerProps = {
@@ -16,6 +17,7 @@ function PanelResizer({
     max,
     onChange,
 }: PanelResizerProps) {
+    const { t } = useLocale()
     const [isDragging, setIsDragging] = useState(false)
     const cleanupRef = useRef<(() => void) | null>(null)
 
@@ -76,9 +78,9 @@ function PanelResizer({
         <div
             className={`panel-resizer panel-resizer--${side}${isDragging ? ' panel-resizer--dragging' : ''}`}
             role="separator"
-            aria-label={side === 'left'
+            aria-label={t(side === 'left'
                 ? 'Изменить ширину дерева модели'
-                : 'Изменить ширину панели Source'}
+                : 'Изменить ширину панели Source')}
             aria-orientation="vertical"
             aria-valuemin={min}
             aria-valuemax={max}

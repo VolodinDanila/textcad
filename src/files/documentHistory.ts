@@ -5,11 +5,11 @@ export const HISTORY_IDLE_MS = 1500
 export const HISTORY_INTERVAL_MS = 10000
 
 export type HistoryReason = 'session' | 'new' | 'open' | 'edit' | 'checkpoint' | 'save' | 'before-ai' | 'ai' | 'before-restore' | 'restore'
-export const HISTORY_LABELS: Record<HistoryReason, string> = {
+export const HISTORY_LABELS = {
     session: 'Начало сеанса', new: 'Новый документ', open: 'Открытие файла', edit: 'Правка Source',
     checkpoint: 'Контрольная точка', save: 'Сохранение файла', 'before-ai': 'До изменения ИИ', ai: 'Изменение ИИ',
     'before-restore': 'До восстановления', restore: 'Восстановление версии',
-}
+} as const satisfies Record<HistoryReason, string>
 export type HistoryVersion = { id: string; documentId: string; createdAt: number; reason: HistoryReason; source: string; bytes: number }
 export type HistoryDocument = { id: string; name: string; updatedAt: number; bytes: number; savedDigest?: string; savedDigests?: string[]; handle?: TextCadFileHandle | null }
 export type HistorySession = { id: string; name: string; source: string }

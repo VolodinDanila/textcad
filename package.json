@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --test tests/dsl/parser.test.ts tests/dsl/semantic.test.ts tests/dsl/evaluator.test.ts tests/dsl/boolean.test.ts tests/dsl/rotation.test.ts tests/dsl/features.test.ts tests/files/textCadFile.test.ts tests/files/documentHistory.test.ts tests/ai/diff.test.ts tests/ai/provider.test.ts tests/cad/gridScale.test.ts",
+    "test": "node --test tests/dsl/parser.test.ts tests/dsl/semantic.test.ts tests/dsl/evaluator.test.ts tests/dsl/boolean.test.ts tests/dsl/rotation.test.ts tests/dsl/features.test.ts tests/files/textCadFile.test.ts tests/files/documentHistory.test.ts tests/ai/diff.test.ts tests/ai/provider.test.ts tests/cad/gridScale.test.ts tests/i18n/messages.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

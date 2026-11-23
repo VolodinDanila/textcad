@@ -47,7 +47,7 @@
 
 .left-tree__close:focus-visible,
 .left-tree__row:focus-visible {
-    outline: 1px solid #77a7ff;
+    outline: 1px solid #bda1e6;
     outline-offset: -1px;
 }
 
@@ -81,8 +81,8 @@
 
 .left-tree__row--selected {
     color: #f1f3f6;
-    background: #242932;
-    border-left-color: #5d8de8;
+    background: #2c2438;
+    border-left-color: #bda1e6;
 }
 
 .left-tree__chevron,
@@ -108,61 +108,19 @@
 }
 
 .left-tree__icon {
-    position: relative;
-    width: 15px;
-    height: 15px;
-    flex: 0 0 15px;
-    margin-right: 7px;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin-right: 8px;
+    color: #b49acb;
 }
-
-.left-tree__icon--document {
-    border: 1px solid #8593aa;
-    border-radius: 2px;
-    background: linear-gradient(135deg, transparent 0 65%, #3a4657 66%);
-}
-
-.left-tree__icon--folder {
-    width: 16px;
-    height: 11px;
-    margin-top: 2px;
-    border: 1px solid #9a8054;
-    border-radius: 2px;
-    background: #4b402d;
-}
-
-.left-tree__icon--folder::before {
-    content: '';
-    position: absolute;
-    left: 1px;
-    top: -4px;
-    width: 7px;
-    height: 4px;
-    border: 1px solid #9a8054;
-    border-bottom: 0;
-    border-radius: 2px 2px 0 0;
-    background: #4b402d;
-}
-
-.left-tree__icon--sketch {
-    border: 1px dashed #b16c8f;
-    border-radius: 2px;
-    transform: rotate(45deg) scale(0.72);
-}
-
-.left-tree__icon--body {
-    border: 1px solid #7793bd;
-    background: linear-gradient(135deg, #4e6c96 0 50%, #334761 51%);
-    transform: rotate(30deg) skew(-7deg, -7deg) scale(0.76);
-}
-
-.left-tree__icon--feature {
-    width: 13px;
-    height: 13px;
-    margin-left: 1px;
-    border: 1px solid #7896c2;
-    border-radius: 50%;
-    box-shadow: 0 0 0 2px rgb(120 150 194 / 12%) inset;
-}
+.left-tree__icon--link { color: #81718f; }
+.left-tree__icon--folder { color: #9e8aaf; }
+.left-tree__row--selected .left-tree__icon { color: #dcc8f1; }
+.app-shell[data-theme="light"] .left-tree__icon { color: #8e6ba9; }
+.app-shell[data-theme="light"] .left-tree__icon--link { color: #a28fae; }
 
 .left-tree__label {
     overflow: hidden;
@@ -187,7 +145,7 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: #5d8de8;
+    background: #bda1e6;
 }
 
 .left-tree__footer[data-stale] .left-tree__footer-dot {

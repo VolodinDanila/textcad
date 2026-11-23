@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import type { EvaluatedSolidArtifact } from '../../dsl'
+import { useLocale } from '../../i18n/localeContext'
+import { countNoun } from '../../i18n/messages'
+import CadIcon, { type CadIconName } from './CadIcon'
 import './LeftTree.css'
 
 type BodyItem = {
@@ -41,16 +44,6 @@ type LeftTreeProps = {
     onClose: () => void
 }
 
-function countLabel(count: number, one: string, few: string, many: string) {
-    const modulo100 = count % 100
-    const modulo10 = count % 10
-
-    if (modulo100 >= 11 && modulo100 <= 14) return many
-    if (modulo10 === 1) return one
-    if (modulo10 >= 2 && modulo10 <= 4) return few
-    return many
-}
-
 function LeftTree({
     documentName,
     sketches,
@@ -59,6 +52,7 @@ function LeftTree({
     width,
     onClose,
 }: LeftTreeProps) {
+    const { locale, t, number } = useLocale()
     const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => new Set())
     const [selectedNode, setSelectedNode] = useState('document')
 
@@ -86,7 +80,7 @@ function LeftTree({
         id: string
         label: string
         depth: number
-        icon: 'document' | 'folder' | 'sketch' | 'body' | 'feature'
+        icon: CadIconName
         expandable?: string
     }) => {
         const isExpanded = expandable ? !collapsedNodes.has(expandable) : undefined
@@ -113,7 +107,7 @@ function LeftTree({
                     <button
                         className="left-tree__chevron"
                         type="button"
-                        aria-label={isExpanded ? `Свернуть ${label}` : `Развернуть ${label}`}
+                        aria-label={t(isExpanded ? 'Свернуть {name}' : 'Развернуть {name}', { name: label })}
                         tabIndex={-1}
                         onClick={(event) => {
                             event.stopPropagation()
@@ -126,7 +120,7 @@ function LeftTree({
                     <span className="left-tree__chevron-spacer" />
                 )}
 
-                <span className={`left-tree__icon left-tree__icon--${icon}`} aria-hidden="true" />
+                <span className={`left-tree__icon left-tree__icon--${icon}`}><CadIcon name={icon} /></span>
                 <span className="left-tree__label" title={label}>{label}</span>
             </div>
         )
@@ -139,23 +133,23 @@ function LeftTree({
     return (
         <aside
             className="left-tree"
-            aria-label="Дерево модели"
+            aria-label={t('Дерево модели')}
             style={{ width, flexBasis: width }}
         >
             <div className="left-tree__header">
-                <span>Model</span>
+                <span>{t('Model')}</span>
                 <button
                     className="left-tree__close"
                     type="button"
-                    aria-label="Закрыть дерево модели"
-                    title="Закрыть дерево модели"
+                    aria-label={t('Закрыть дерево модели')}
+                    title={t('Закрыть дерево модели')}
                     onClick={onClose}
                 >
                     ×
                 </button>
             </div>
 
-            <div className="left-tree__content" role="tree" aria-label="Структура модели">
+            <div className="left-tree__content" role="tree" aria-label={t('Структура модели')}>
                 {renderRow({
                     id: 'document',
                     label: documentName,
@@ -168,7 +162,7 @@ function LeftTree({
                     <>
                         {renderRow({
                             id: 'sketches',
-                            label: 'Эскизы',
+                            label: t('Эскизы'),
                             depth: 1,
                             icon: 'folder',
                             expandable: 'sketches',
@@ -183,7 +177,7 @@ function LeftTree({
 
                         {renderRow({
                             id: 'bodies',
-                            label: 'Тела и операции',
+                            label: t('Тела и операции'),
                             depth: 1,
                             icon: 'folder',
                             expandable: 'bodies',
@@ -195,7 +189,7 @@ function LeftTree({
                                 <div key={bodyNode}>
                                     {renderRow({
                                         id: bodyNode,
-                                        label: `${body.name}${body.published ? ' · результат' : ''}`,
+                                        label: `${body.name}${body.published ? ` · ${t('результат')}` : ''}`,
                                         depth: 2,
                                         icon: 'body',
                                         expandable: bodyNode,
@@ -203,15 +197,15 @@ function LeftTree({
 
                                     {!collapsedNodes.has(bodyNode) && renderRow({
                                         id: `feature:${body.name}`,
-                                        label: `${OPERATION_LABELS[body.operation]}${body.distance !== undefined ? ` · ${body.distance} мм` : ''}${body.count !== undefined ? ` · ${body.count} шт.` : ''}${body.angle !== undefined ? ` · ${body.angle}°` : ''}`,
+                                        label: `${t(OPERATION_LABELS[body.operation])}${body.distance !== undefined ? ` · ${number(body.distance)} ${t('мм')}` : ''}${body.count !== undefined ? ` · ${number(body.count)} ${t('шт.')}` : ''}${body.angle !== undefined ? ` · ${number(body.angle)}°` : ''}`,
                                         depth: 3,
-                                        icon: 'feature',
+                                        icon: body.operation,
                                     })}
                                     {!collapsedNodes.has(bodyNode) && body.inputs.map((input, index) => renderRow({
                                         id: `input:${body.name}:${index}`,
-                                        label: `← ${input}`,
+                                        label: input,
                                         depth: 4,
-                                        icon: 'feature',
+                                        icon: 'link',
                                     }))}
                                 </div>
                             )
@@ -222,9 +216,9 @@ function LeftTree({
 
             <div className="left-tree__footer" data-stale={isStale || undefined}>
                 <span className="left-tree__footer-dot" aria-hidden="true" />
-                {bodies.length} {countLabel(bodies.length, 'операция', 'операции', 'операций')}
+                {number(bodies.length)} {countNoun(bodies.length, 'feature', locale)}
                 {' · '}
-                {sketches.length} {countLabel(sketches.length, 'эскиз', 'эскиза', 'эскизов')}
+                {number(sketches.length)} {countNoun(sketches.length, 'sketch', locale)}
             </div>
         </aside>
     )

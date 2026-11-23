@@ -1,3 +1,5 @@
+import { translate, type Locale } from '../i18n/messages.ts'
+
 export type TextCadFileHandle = {
     name: string
     getFile: () => Promise<File>
@@ -35,9 +37,9 @@ type FilePickerType = {
     accept: Record<string, string[]>
 }
 
-const TEXTCAD_FILE_TYPES: FilePickerType[] = [
+const textCadFileTypes = (locale: Locale): FilePickerType[] => [
     {
-        description: 'TextCAD document',
+        description: translate('Документ TextCAD', locale),
         accept: {
             'text/plain': ['.textcad'],
         },
@@ -92,7 +94,7 @@ async function openWithInput(): Promise<OpenTextCadResult | null> {
     })
 }
 
-export async function openTextCadDocument(): Promise<OpenTextCadResult | null> {
+export async function openTextCadDocument(locale: Locale = 'ru'): Promise<OpenTextCadResult | null> {
     const pickerWindow = window as FilePickerWindow
     if (!pickerWindow.showOpenFilePicker) {
         return openWithInput()
@@ -101,7 +103,7 @@ export async function openTextCadDocument(): Promise<OpenTextCadResult | null> {
     try {
         const handles = await pickerWindow.showOpenFilePicker({
             multiple: false,
-            types: TEXTCAD_FILE_TYPES,
+            types: textCadFileTypes(locale),
         })
         const handle = handles[0]
         if (!handle) return null
@@ -143,12 +145,13 @@ function downloadTextCadDocument(name: string, source: string) {
 export async function saveTextCadDocumentAs(
     suggestedName: string,
     source: string,
+    locale: Locale = 'ru',
 ): Promise<SaveTextCadResult | null> {
     let name = ensureTextCadExtension(suggestedName)
     const pickerWindow = window as FilePickerWindow
 
     if (!pickerWindow.showSaveFilePicker) {
-        const enteredName = window.prompt('Имя файла TextCAD', name)
+        const enteredName = window.prompt(translate('Имя файла TextCAD', locale), name)
         if (enteredName === null) return null
 
         name = ensureTextCadExtension(enteredName)
@@ -159,7 +162,7 @@ export async function saveTextCadDocumentAs(
     try {
         const handle = await pickerWindow.showSaveFilePicker({
             suggestedName: name,
-            types: TEXTCAD_FILE_TYPES,
+            types: textCadFileTypes(locale),
         })
         await writeTextCadDocument(handle, source)
         return { name: handle.name, handle }

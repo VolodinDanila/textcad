@@ -4,6 +4,9 @@ import { buildLineDiff } from '../../ai/diff'
 import type { Diagnostic } from '../../dsl'
 import type { HistoryVersion } from '../../files/documentHistory'
 import HistoryPanel from './HistoryPanel'
+import { useLocale } from '../../i18n/localeContext'
+import { localizeText } from '../../i18n/messages'
+import { localizeDiagnostic, localizeStatus } from '../../i18n/diagnostics'
 import './RightPanel.css'
 
 export type PanelTab = 'chat' | 'source' | 'history'
@@ -26,6 +29,7 @@ type RightPanelProps = {
 
 type ChatMessage = AiChatHistoryItem & {
     id: number
+    system?: boolean
 }
 
 type PendingProposal = AiEditProposal & {
@@ -53,6 +57,7 @@ function RightPanel({
     onCheckpoint,
     onRestoreVersion,
 }: RightPanelProps) {
+    const { locale, t } = useLocale()
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [prompt, setPrompt] = useState('')
     const [pendingProposal, setPendingProposal] = useState<PendingProposal | null>(null)
@@ -86,8 +91,8 @@ function RightPanel({
         )
     }
 
-    const addMessage = (role: ChatMessage['role'], text: string) => {
-        const message = { id: nextMessageId.current, role, text }
+    const addMessage = (role: ChatMessage['role'], text: string, system = false) => {
+        const message = { id: nextMessageId.current, role, text, system }
         nextMessageId.current += 1
         setMessages((current) => [...current, message])
     }
@@ -110,6 +115,7 @@ function RightPanel({
                 source: baseSource,
                 diagnostics,
                 history,
+                language: locale,
             })
             addMessage('assistant', proposal.message)
 
@@ -159,13 +165,13 @@ function RightPanel({
         onSourceChange(pendingProposal.source, 'ai')
         setPendingProposal(null)
         setChatError('')
-        addMessage('assistant', 'Изменения применены к Source. Сохраните файл, когда будете готовы.')
+        addMessage('assistant', 'Изменения применены к Source. Сохраните файл, когда будете готовы.', true)
     }
 
     const rejectProposal = () => {
         setPendingProposal(null)
         setChatError('')
-        addMessage('assistant', 'Предложение отклонено, документ не изменён.')
+        addMessage('assistant', 'Предложение отклонено, документ не изменён.', true)
     }
 
     const displayedState = activeTab === 'chat'
@@ -174,11 +180,15 @@ function RightPanel({
     const displayedStatus = activeTab === 'chat'
         ? (isSending ? 'ИИ готовит предложение...' : chatError ? 'Нужна проверка' : 'ИИ-помощник готов')
         : SOURCE_STATUS[sourceState]
+    const validationPrefix = 'Предложение не прошло проверку: '
+    const displayedChatError = chatError.startsWith(validationPrefix)
+        ? t('Предложение не прошло проверку: {detail}', { detail: localizeStatus(chatError.slice(validationPrefix.length), locale) })
+        : localizeText(chatError, locale)
 
     return (
         <aside
             className="right-panel"
-            aria-label="Боковая панель"
+            aria-label={t('Боковая панель')}
             style={{ width, flexBasis: width }}
         >
             <div className="right-panel__header">
@@ -190,7 +200,7 @@ function RightPanel({
                         aria-selected={activeTab === 'chat'}
                         onClick={() => onTabChange('chat')}
                     >
-                        Chat
+                        {t('Chat')}
                     </button>
 
                     <button
@@ -200,19 +210,19 @@ function RightPanel({
                         aria-selected={activeTab === 'source'}
                         onClick={() => onTabChange('source')}
                     >
-                        Source
+                        {t('Source')}
                     </button>
                     <button className="right-panel__tab" type="button" role="tab"
                         aria-selected={activeTab === 'history'} onClick={() => onTabChange('history')}>
-                        История
+                        {t('История')}
                     </button>
                 </div>
 
                 <button
                     className="right-panel__close"
                     type="button"
-                    aria-label="Закрыть панель"
-                    title="Закрыть панель"
+                    aria-label={t('Закрыть панель')}
+                    title={t('Закрыть панель')}
                     onClick={onClose}
                 >
                     ×
@@ -226,13 +236,13 @@ function RightPanel({
                 <div
                     className="right-panel__content right-panel__content--source"
                     role="tabpanel"
-                    aria-label="Source"
+                    aria-label={t('Source')}
                 >
                     <textarea
                         ref={editorRef}
                         className="right-panel__source-editor"
                         value={source}
-                        aria-label="Исходный код TextCAD"
+                        aria-label={t('Исходный код TextCAD')}
                         spellCheck={false}
                         onChange={(event) => onSourceChange(event.target.value)}
                     />
@@ -240,7 +250,7 @@ function RightPanel({
                     {diagnostics.length > 0 && (
                         <div
                             className="right-panel__diagnostics"
-                            aria-label="Ошибки документа"
+                            aria-label={t('Ошибки документа')}
                             aria-live="polite"
                         >
                             {diagnostics.map((diagnostic, index) => (
@@ -256,7 +266,7 @@ function RightPanel({
                                         {diagnostic.sourceSpan.start.line}:{diagnostic.sourceSpan.start.column}
                                     </span>
                                     <span className="right-panel__diagnostic-message">
-                                        {diagnostic.message}
+                                        {localizeDiagnostic(diagnostic, locale)}
                                     </span>
                                 </button>
                             ))}
@@ -267,16 +277,15 @@ function RightPanel({
                 <div
                     className="right-panel__content right-panel__content--chat"
                     role="tabpanel"
-                    aria-label="Chat"
+                    aria-label={t('Chat')}
                 >
                     <div className="right-panel__chat-messages" aria-live="polite">
                         {messages.length === 0 && (
                             <div className="right-panel__empty">
                                 <span className="right-panel__empty-icon" aria-hidden="true">✦</span>
-                                <strong>TextCAD Assistant</strong>
+                                <strong>{t('brand')} · {t('Помощник')}</strong>
                                 <span>
-                                    Опишите изменение в {documentName}. ИИ предложит новый Source,
-                                    но применит его только после вашей проверки.
+                                    {t('Опишите изменение в {name}. ИИ предложит новый Source, но применит его только после вашей проверки.', { name: documentName })}
                                 </span>
                             </div>
                         )}
@@ -287,9 +296,9 @@ function RightPanel({
                                 key={message.id}
                             >
                                 <span className="right-panel__message-author">
-                                    {message.role === 'user' ? 'Вы' : 'ИИ'}
+                                    {t(message.role === 'user' ? 'Вы' : 'ИИ')}
                                 </span>
-                                <p>{message.text}</p>
+                                <p>{message.system ? localizeText(message.text, locale) : message.text}</p>
                             </div>
                         ))}
 
@@ -303,18 +312,18 @@ function RightPanel({
 
                         {chatError && (
                             <div className="right-panel__chat-error" role="alert">
-                                {chatError}
+                                {displayedChatError}
                             </div>
                         )}
                     </div>
 
                     {pendingProposal && (
-                        <section className="right-panel__proposal" aria-label="Предложение ИИ">
+                        <section className="right-panel__proposal" aria-label={t('Предложение ИИ')}>
                             <div className="right-panel__proposal-header">
-                                <strong>Проверенное изменение</strong>
-                                <span>Source ещё не изменён</span>
+                                <strong>{t('Проверенное изменение')}</strong>
+                                <span>{t('Source ещё не изменён')}</span>
                             </div>
-                            <div className="right-panel__diff" aria-label="Сравнение исходного кода">
+                            <div className="right-panel__diff" aria-label={t('Сравнение исходного кода')}>
                                 {proposalDiff.map((line, index) => (
                                     <div
                                         className="right-panel__diff-line"
@@ -329,8 +338,8 @@ function RightPanel({
                                 ))}
                             </div>
                             <div className="right-panel__proposal-actions">
-                                <button type="button" onClick={rejectProposal}>Отклонить</button>
-                                <button type="button" data-primary onClick={applyProposal}>Применить</button>
+                                <button type="button" onClick={rejectProposal}>{t('Отклонить')}</button>
+                                <button type="button" data-primary onClick={applyProposal}>{t('Применить')}</button>
                             </div>
                         </section>
                     )}
@@ -339,16 +348,16 @@ function RightPanel({
                         <textarea
                             value={prompt}
                             rows={3}
-                            aria-label="Сообщение ИИ-помощнику"
-                            placeholder="Например: сделай корпус выше на 5 мм"
+                            aria-label={t('Сообщение ИИ-помощнику')}
+                            placeholder={t('Например: сделай корпус выше на 5 мм')}
                             disabled={isSending}
                             onChange={(event) => setPrompt(event.target.value)}
                             onKeyDown={handleComposerKeyDown}
                         />
                         <div className="right-panel__composer-footer">
-                            <span>Enter — отправить · Shift+Enter — строка</span>
+                            <span>{t('Enter — отправить · Shift+Enter — строка')}</span>
                             <button type="submit" disabled={isSending || prompt.trim().length === 0}>
-                                Отправить
+                                {t('Отправить')}
                             </button>
                         </div>
                     </form>
@@ -357,7 +366,7 @@ function RightPanel({
 
             <div className="right-panel__status" data-state={displayedState}>
                 <span className="right-panel__status-dot" aria-hidden="true" />
-                <span>{displayedStatus}</span>
+                <span>{t(displayedStatus)}</span>
             </div>
         </aside>
     )

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocale } from '../../i18n/localeContext'
+import type { MessageKey } from '../../i18n/messages'
 import './AppHeader.css'
 
 type MenuDefinition = {
-    label: string
+    label: MessageKey
     items: Array<{
         id: string
-        label: string
+        label: MessageKey
         shortcut?: string
         action?: 'new' | 'open' | 'save' | 'saveAs' | 'history'
     }>
@@ -54,7 +56,7 @@ const menus: MenuDefinition[] = [
         items: [
             { id: 'quick-start', label: 'Quick start' },
             { id: 'shortcuts', label: 'Keyboard shortcuts' },
-            { id: 'about', label: 'About ТекстВСАПР' },
+            { id: 'about', label: 'About' },
         ],
     },
 ]
@@ -90,6 +92,7 @@ function AppHeader({
     onSaveDocumentAs,
     onOpenHistory,
 }: AppHeaderProps) {
+    const { locale, setLocale, t } = useLocale()
     const [openMenu, setOpenMenu] = useState<string | null>(null)
     const headerRef = useRef<HTMLElement>(null)
     const documentActions = {
@@ -144,9 +147,9 @@ function AppHeader({
     return (
         <header ref={headerRef} className="app-header">
             <div className="app-header__left">
-                <div className="app-header__brand">ТекстВСАПР</div>
+                <div className="app-header__brand">{t('brand')}</div>
 
-                <nav className="app-header__nav" aria-label="Главное меню">
+                <nav className="app-header__nav" aria-label={t('Главное меню')}>
                     {menus.map((menu) => {
                         const isOpen = openMenu === menu.label
 
@@ -161,14 +164,14 @@ function AppHeader({
                                         setOpenMenu(isOpen ? null : menu.label)
                                     }}
                                 >
-                                    {menu.label}
+                                    {t(menu.label)}
                                 </button>
 
                                 {isOpen && (
                                     <div
                                         className="app-header__dropdown"
                                         role="menu"
-                                        aria-label={menu.label}
+                                        aria-label={t(menu.label)}
                                     >
                                         {menu.items.map((item) => {
                                             const action = item.action
@@ -181,7 +184,7 @@ function AppHeader({
                                                     type="button"
                                                     role="menuitem"
                                                     disabled={!action}
-                                                    title={action ? undefined : 'Пока недоступно'}
+                                                    title={action ? undefined : t('Пока недоступно')}
                                                     key={item.id}
                                                     onClick={() => {
                                                         if (!action) return
@@ -189,7 +192,7 @@ function AppHeader({
                                                         void action()
                                                     }}
                                                 >
-                                                    <span>{item.label}</span>
+                                                    <span>{t(item.label, { brand: t('brand') })}</span>
                                                     <span
                                                         className="app-header__placeholder"
                                                         aria-hidden="true"
@@ -210,7 +213,7 @@ function AppHeader({
             <div
                 className="app-header__document"
                 title={isDocumentDirty
-                    ? `${documentName} · есть несохранённые изменения`
+                    ? `${documentName} · ${t('Есть несохранённые изменения')}`
                     : documentName}
             >
                 {documentName}
@@ -222,16 +225,19 @@ function AppHeader({
             </div>
 
             <div className="app-header__right">
-                <span className="app-header__mode" aria-hidden="true">CAD</span>
+                <select className="app-header__language" aria-label={t('Язык интерфейса')} title={t('Язык интерфейса')}
+                    value={locale} onChange={(event) => setLocale(event.target.value === 'en' ? 'en' : 'ru')}>
+                    <option value="ru">RU</option><option value="en">EN</option>
+                </select>
                 <button
                     className="app-header__theme-toggle"
                     type="button"
-                    aria-label={theme === 'light'
+                    aria-label={t(theme === 'light'
                         ? 'Включить тёмную тему'
-                        : 'Включить светлую тему'}
-                    title={theme === 'light'
+                        : 'Включить светлую тему')}
+                    title={t(theme === 'light'
                         ? 'Тёмная тема'
-                        : 'Светлая тема'}
+                        : 'Светлая тема')}
                     aria-pressed={theme === 'light'}
                     onClick={onToggleTheme}
                 >
@@ -240,13 +246,13 @@ function AppHeader({
                 <button
                     className="app-header__panel-toggle"
                     type="button"
-                    aria-label={isLeftPanelOpen
+                    aria-label={t(isLeftPanelOpen
                         ? 'Закрыть дерево модели'
-                        : 'Открыть дерево модели'}
+                        : 'Открыть дерево модели')}
                     aria-pressed={isLeftPanelOpen}
-                    title={isLeftPanelOpen
+                    title={t(isLeftPanelOpen
                         ? 'Закрыть дерево модели'
-                        : 'Открыть дерево модели'}
+                        : 'Открыть дерево модели')}
                     onClick={onToggleLeftPanel}
                 >
                     ☷
@@ -254,13 +260,13 @@ function AppHeader({
                 <button
                     className="app-header__panel-toggle"
                     type="button"
-                    aria-label={isRightPanelOpen
+                    aria-label={t(isRightPanelOpen
                         ? 'Закрыть панель Source'
-                        : 'Открыть панель Source'}
+                        : 'Открыть панель Source')}
                     aria-pressed={isRightPanelOpen}
-                    title={isRightPanelOpen
+                    title={t(isRightPanelOpen
                         ? 'Закрыть панель Source'
-                        : 'Открыть панель Source'}
+                        : 'Открыть панель Source')}
                     onClick={onToggleRightPanel}
                 >
                     &lt;/&gt;

@@ -24,5 +24,4 @@ export function gridViewMetrics(distance: number, fovDegrees: number, height: nu
     }
 }
 
-const spacingFormat = new Intl.NumberFormat('ru-RU', { maximumSignificantDigits: 4, useGrouping: false })
-export const formatGridSpacing = (spacing: number) => spacingFormat.format(spacing)
+export const formatGridSpacing = (spacing: number, locale: 'ru' | 'en' = 'ru') => new Intl.NumberFormat(locale === 'ru' ? 'ru-RU' : 'en-US', { maximumSignificantDigits: 4, useGrouping: false }).format(spacing)

@@ -1,4 +1,5 @@
-import type { Diagnostic } from '../dsl'
+import type { Diagnostic } from '../dsl/index.ts'
+import { localizeText, type Locale } from '../i18n/messages.ts'
 
 export type AiChatHistoryItem = {
     role: 'user' | 'assistant'
@@ -17,6 +18,7 @@ type RequestAiEditOptions = {
     diagnostics: Diagnostic[]
     history: AiChatHistoryItem[]
     signal?: AbortSignal
+    language?: Locale
 }
 
 function formatDiagnostic(diagnostic: Diagnostic) {
@@ -30,6 +32,7 @@ export async function requestAiEdit({
     diagnostics,
     history,
     signal,
+    language = 'ru',
 }: RequestAiEditOptions): Promise<AiEditProposal> {
     const response = await fetch('/api/assistant', {
         method: 'POST',
@@ -39,20 +42,21 @@ export async function requestAiEdit({
             source,
             diagnostics: diagnostics.map(formatDiagnostic),
             history: history.slice(-8),
+            language,
         }),
         signal,
     })
 
     const body = await response.json() as Partial<AiEditProposal> & { error?: string }
     if (!response.ok) {
-        throw new Error(body.error || 'ИИ-помощник сейчас недоступен.')
+        throw new Error(localizeText(body.error || 'ИИ-помощник сейчас недоступен.', language))
     }
     if (
         typeof body.message !== 'string'
         || typeof body.source !== 'string'
         || typeof body.changed !== 'boolean'
     ) {
-        throw new Error('ИИ-помощник вернул некорректный ответ.')
+        throw new Error(localizeText('ИИ-помощник вернул некорректный ответ.', language))
     }
 
     return {

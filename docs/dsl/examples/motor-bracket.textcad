@@ -1,10 +1,6 @@
-; Design example for the direction after DSL v0.
-; This file intentionally uses reserved commands that are not part of the
-; first executable evaluator: box, cylinder, pattern-linear, union, cut,
-; fillet, chamfer and selectors.
-
 [textcad version=1 default-length=mm default-angle=deg]
 
+; Demonstration dimensions, not a manufacturing drawing.
 [param baseWidth 120mm]
 [param baseDepth 80mm]
 [param baseThickness 8mm]
@@ -14,111 +10,47 @@
 [param shaftRadius 18mm]
 [param boltRadius 3mm]
 
-[let base
-  [box
-    size=[baseWidth baseDepth baseThickness]
-    center=[0mm 0mm 4mm]
-  ]
-]
+[let baseProfile [sketch plane=XY
+  [profile [rectangle origin=[-60mm -40mm] width=baseWidth height=baseDepth]]
+]]
+[let base [extrude baseProfile length=baseThickness]]
+[let wallProfile [sketch plane=XZ origin=[0mm 40mm 8mm]
+  [profile [rectangle origin=[-50mm 0mm] width=wallWidth height=wallHeight]]
+]]
+[let wall [extrude wallProfile length=wallThickness]]
 
-[let wall
-  [box
-    size=[wallWidth wallThickness wallHeight]
-    center=[0mm 36mm 43mm]
-  ]
-]
+; Two triangular ribs extend toward the front of the bracket.
+[let gussetProfile [sketch plane=YZ origin=[-40mm 0mm 8mm]
+  [profile [polygon [0mm 0mm] [32mm 0mm] [32mm 40mm]]]
+]]
+[let leftGusset [extrude gussetProfile length=6mm]]
+[let gussets [pattern-linear leftGusset count=2 axis=X spacing=74mm]]
+[let bracketBody [union base wall gussets]]
 
-[let gussetProfile
-  [sketch plane=XZ origin=[-40mm 32mm 8mm]
-    [profile role=outer
-      [line start=[0mm 0mm] end=[30mm 0mm]]
-      [line start=[30mm 0mm] end=[30mm 40mm]]
-      [line start=[30mm 40mm] end=[0mm 0mm]]
-    ]
-  ]
-]
+; Round the four vertical base corners, then re-select for later features.
+[let rounded [fillet bracketBody
+  edges=[edges bracketBody type=line axis=Z length=8mm] radius=2mm
+]]
 
-[let leftGusset
-  [extrude gussetProfile length=8mm symmetric=true]
-]
+[let baseHoleProfile [sketch plane=XY origin=[-45mm -25mm -1mm]
+  [profile [circle center=[0mm 0mm] radius=boltRadius]]
+]]
+[let baseHole [extrude baseHoleProfile length=10mm]]
+[let baseHoleRow [pattern-linear baseHole count=2 axis=X spacing=90mm]]
+[let baseHoles [pattern-linear baseHoleRow count=2 axis=Y spacing=50mm]]
+[let baseDrilled [cut rounded baseHoles]]
 
-[let gussets
-  [pattern-linear
-    leftGusset
-    count=2
-    direction=X
-    spacing=50mm
-  ]
-]
-
-[let bracketBody
-  [union base wall gussets]
-]
-
-[let baseHole
-  [cylinder
-    radius=boltRadius
-    height=baseThickness
-    axis=Z
-    center=[-45mm -25mm 4mm]
-  ]
-]
-
-[let baseHoleRow
-  [pattern-linear baseHole count=2 direction=X spacing=90mm]
-]
-
-[let baseHoles
-  [pattern-linear baseHoleRow count=2 direction=Y spacing=50mm]
-]
-
-[let shaftHole
-  [cylinder
-    radius=shaftRadius
-    height=wallThickness
-    axis=Y
-    center=[0mm 36mm 48mm]
-    symmetric=true
-  ]
-]
-
-[let motorBoltHole
-  [cylinder
-    radius=boltRadius
-    height=wallThickness
-    axis=Y
-    center=[-30mm 36mm 25mm]
-    symmetric=true
-  ]
-]
-
-[let motorBoltRow
-  [pattern-linear motorBoltHole count=2 direction=X spacing=60mm]
-]
-
-[let motorBoltHoles
-  [pattern-linear motorBoltRow count=2 direction=Z spacing=46mm]
-]
-
-[let drilledBracket
-  [cut bracketBody baseHoles shaftHole motorBoltHoles]
-]
-
-[let roundedBracket
-  [fillet
-    drilledBracket
-    radius=3mm
-    selector=[edges direction=Z convex=true]
-  ]
-]
-
-[let finishedBracket
-  [chamfer
-    roundedBracket
-    distance=0.8mm
-    selector=[edges generated-by=baseHoles circular=true]
-  ]
-]
-
+[let shaftDrilled [hole baseDrilled
+  origin=[0mm 41mm 48mm] axis=[0 -1 0] radius=shaftRadius depth=10mm
+]]
+[let motorHoleProfile [sketch plane=XZ origin=[-30mm 41mm 25mm]
+  [profile [circle center=[0mm 0mm] radius=boltRadius]]
+]]
+[let motorHole [extrude motorHoleProfile length=10mm]]
+[let motorHoleRow [pattern-linear motorHole count=2 axis=X spacing=60mm]]
+[let motorHoles [pattern-linear motorHoleRow count=2 axis=Z spacing=46mm]]
+[let drilledBracket [cut shaftDrilled motorHoles]]
+[let finishedBracket [chamfer drilledBracket
+  edges=[edges drilledBracket type=circle axis=Z extreme=min] distance=0.5mm
+]]
 [root finishedBracket label="Motor bracket"]
-
